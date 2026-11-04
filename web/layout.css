@@ -1,0 +1,243 @@
+/* ==========================================================================
+   layout.css —— 单页三栏骨架（契约 6.1）
+   ┌────────┬──────────────┬────────────┐
+   │ 左栏    │ 中栏          │ 右栏        │
+   │ 工作区   │ 看板          │ 详情        │
+   │ 可折叠   │ 自适应         │ 可拖宽/关闭  │
+   └────────┴──────────────┴────────────┘
+   窄屏 <1100px：左栏变抽屉，右栏变浮层
+   ========================================================================== */
+
+.app {
+  display: flex;
+  height: 100vh;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* ---------------- 顶栏（横跨三栏） ---------------- */
+.app-bar {
+  flex: 0 0 auto;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  z-index: 20;
+}
+.app-bar .brand { font-weight: 700; font-size: 14px; color: var(--text); white-space: nowrap; }
+.app-bar .brand:hover { text-decoration: none; }
+.app-bar .spacer { flex: 1 1 auto; }
+
+.shell { display: flex; flex-direction: column; height: 100vh; width: 100%; overflow: hidden; }
+.main { display: flex; flex: 1 1 auto; min-height: 0; position: relative; }
+
+/* ---------------- 左栏：工作区目录 ---------------- */
+.sidebar {
+  flex: 0 0 200px;
+  width: 200px;
+  background: var(--card);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  transition: width .16s ease, flex-basis .16s ease;
+  overflow: hidden;
+}
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 11px 7px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: .03em;
+  flex: 0 0 auto;
+}
+.sidebar-head .icon-btn { margin-left: auto; }
+.sidebar-list { flex: 1 1 auto; overflow-y: auto; padding: 0 7px 10px; }
+.ws-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 7px 8px;
+  margin-bottom: 3px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12.8px;
+  cursor: pointer;
+  line-height: 1.35;
+}
+.ws-item:hover { background: var(--bg-soft); }
+.ws-item.active { background: color-mix(in srgb, var(--accent) 12%, transparent); border-color: color-mix(in srgb, var(--accent) 30%, transparent); font-weight: 600; }
+.ws-item .ws-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-item .ws-mini {
+  display: flex;
+  gap: 5px;
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: var(--muted);
+  font-weight: 400;
+  flex-wrap: wrap;
+}
+.ws-item .ws-mini i { font-style: normal; }
+.ws-item .ws-mini i.on { color: var(--accent); }
+
+/* 折叠态：只剩图标条 */
+.sidebar.collapsed { flex-basis: 48px; width: 48px; }
+.sidebar.collapsed .sidebar-head .lbl,
+.sidebar.collapsed .ws-item .ws-name,
+.sidebar.collapsed .ws-item .ws-mini { display: none; }
+.sidebar.collapsed .sidebar-head { justify-content: center; padding: 10px 0 7px; }
+.sidebar.collapsed .sidebar-head .icon-btn { margin-left: 0; }
+.sidebar.collapsed .sidebar-list { padding: 0 6px 10px; }
+.sidebar.collapsed .ws-item { text-align: center; padding: 8px 4px; font-weight: 700; font-size: 12px; }
+
+/* ---------------- 中栏：看板 ---------------- */
+.board-pane {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg);
+}
+.pane-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  flex-wrap: wrap;
+}
+.pane-title { font-size: 15px; font-weight: 700; margin: 0; white-space: nowrap; }
+.pane-path {
+  font-size: 11px;
+  color: var(--muted);
+  font-family: var(--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 340px;
+}
+.pane-tools { display: flex; align-items: center; gap: 7px; margin-left: auto; flex-wrap: wrap; }
+.pane-tools .input, .pane-tools .select { width: auto; }
+.pane-tools .search { width: 190px; }
+/* #49 用户要求「新建按钮宽度改为现在的 2 倍」：基础 min-width 是 72px，×2 = 144px */
+.pane-tools .new-btn-wide { min-width: 144px; }
+.board-wrap { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+
+/* 快速新建条 */
+.quick-add {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 7px;
+  padding: 0 12px 9px;
+}
+.quick-add .input { flex: 1 1 auto; }
+.quick-add .hint { flex: 0 0 auto; font-size: 11px; color: var(--muted); align-self: center; }
+
+/* ---------------- 右栏：详情 ---------------- */
+.detail-pane {
+  flex: 0 0 420px;
+  width: 420px;
+  min-width: 300px;
+  max-width: 70vw;
+  background: var(--card);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  position: relative;
+}
+.detail-pane.hidden { display: none; }
+.detail-pane .pane-head {
+  border-bottom: 1px solid var(--border);
+  padding: 9px 12px;
+  flex-wrap: nowrap;
+}
+.detail-pane .pane-head .ref { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.detail-pane .pane-head .spacer { flex: 1 1 auto; }
+
+/* 右栏左侧拖宽把手 */
+.resize-handle {
+  position: absolute;
+  left: -3px;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  cursor: col-resize;
+  z-index: 5;
+}
+.resize-handle:hover, .resize-handle.dragging { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+
+/* ---------------- 中栏空态 ---------------- */
+.pane-empty {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 13.5px;
+  padding: 30px;
+  text-align: center;
+}
+
+/* ---------------- 遮罩（窄屏抽屉/浮层） ---------------- */
+.scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 18, 24, .45);
+  z-index: 90;
+  display: none;
+}
+.scrim.on { display: block; }
+
+/* ---------------- 窄屏适配 ---------------- */
+.mobile-only { display: none; }
+
+@media (max-width: 1100px) {
+  .mobile-only { display: inline-flex; }
+
+  /* 左栏变抽屉 */
+  .sidebar {
+    position: fixed;
+    top: 44px;
+    bottom: 0;
+    left: 0;
+    z-index: 100;
+    width: 232px;
+    flex-basis: 232px;
+    transform: translateX(-100%);
+    transition: transform .2s ease;
+    box-shadow: 8px 0 30px rgba(0, 0, 0, .22);
+  }
+  .sidebar.open { transform: translateX(0); }
+  .sidebar.collapsed { flex-basis: 232px; width: 232px; }
+  .sidebar.collapsed .sidebar-head .lbl,
+  .sidebar.collapsed .ws-item .ws-name,
+  .sidebar.collapsed .ws-item .ws-mini { display: revert; }
+  .sidebar.collapsed .ws-item { text-align: left; padding: 7px 8px; font-weight: 400; }
+
+  /* 右栏变浮层，覆盖中栏 */
+  .detail-pane {
+    position: fixed;
+    top: 44px;
+    right: 0;
+    bottom: 0;
+    z-index: 100;
+    width: min(460px, 92vw);
+    flex-basis: auto;
+    max-width: 92vw;
+    box-shadow: -8px 0 30px rgba(0, 0, 0, .22);
+  }
+  .resize-handle { display: none; }
+  .pane-tools .search { width: 130px; }
+  .pane-path { display: none; }
+}

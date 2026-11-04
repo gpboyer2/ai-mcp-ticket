@@ -1,0 +1,22 @@
+{
+  "name": "ai-mcp-ticket",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "AI 工单系统：人看网页（拖拽/评论），AI 读纯文本（MCP + text/plain URL），数据存 SQLite，工作区只读同步自 DeepSeek Harness",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test 'tests/*.test.js'",
+    "smoke": "node scripts/smoke.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "better-sqlite3": "^13.0.3",
+    "express": "^5.3.0",
+    "zod": "^3.25.76"
+  }
+}

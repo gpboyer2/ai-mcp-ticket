@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>AI 工单</title>
+  <!-- 内联 SVG 图标，不引外部资源 -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232563eb'/%3E%3Cpath d='M8 11h16M8 16h11M8 21h7' stroke='white' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/layout.css">
+  <!-- 主题提前应用，避免深浅色闪烁 -->
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('ai-mcp-ticket-theme');
+        var t = saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', t);
+      } catch (e) { /* 隐私模式下 localStorage 可能不可用 */ }
+    })();
+  </script>
+</head>
+<body>
+  <!-- 三栏骨架由 app.js 渲染；所有页面路径都返回这份 HTML，前端按 pathname 还原状态 -->
+  <div id="app"><div class="loading">加载中…</div></div>
+
+  <!-- 全部本地文件，无 CDN、无外链字体，断网可用 -->
+  <script src="/icons.js"></script>
+  <script src="/common.js"></script>
+  <script src="/images.js"></script>
+  <script src="/deps-picker.js"></script>
+  <script src="/editor.js"></script>
+  <script src="/sidebar.js"></script>
+  <script src="/board.js"></script>
+  <script src="/detail.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,69 @@
+// 纯文本视图的统一装配：查工单 → 挂评论 → 渲染。
+// REST /api/workspaces/:ws/text、页面 /{ws}/list、MCP ticket_list 三处共用同一份，
+// 否则同一份列表在三处会各自漂移（谁挂了评论、谁漏了截断，很快对不上）。
+import { renderTicket, renderTicketList, statusHint } from './render/text.js';
+import { parseStatusFilter } from './repo/workspaces.js';
+import { HttpError } from './actor.js';
+
+/**
+ * 查询参数转数字。空值 → undefined（用默认）；非数字 → 400，
+ * 不让 NaN 流进 SQL（NaN 会被绑定成 NULL，撞 NOT NULL 约束后变成 500）。
+ */
+function num(v, name) {
+  if (v === undefined || v === null || v === '') return undefined;
+  const n = Number(v);
+  if (!Number.isFinite(n)) {
+    throw new HttpError(400, 'NUMBER_INVALID', `${name} 必须是数字，收到 "${v}"`);
+  }
+  return n;
+}
+
+/**
+ * 列表纯文本（契约 4.2）
+ * @param {{tickets:object, comments:object}} ctx
+ * @param {object} ws  工作区行（含 slug/path）
+ * @param {object} [query] {status,q,priority,sort,order,limit,offset,maxlen,comments}
+ */
+export function listTextView(ctx, ws, query = {}) {
+  const statuses = parseStatusFilter(query.status);
+  const rows = ctx.tickets.list(ws, {
+    status: statuses ? statuses.join(',') : undefined,
+    priority: query.priority,
+    q: query.q,
+    sort: query.sort,
+    order: query.order,
+    // 默认给 1000（文本视图要一次看全）；越界由 tickets.list 抛 400，不在这里静默截断
+    limit: num(query.limit, 'limit') ?? 1000,
+    offset: num(query.offset, 'offset'),
+  });
+  // 列表默认带评论：AI 靠它一眼看出"有没有新动静"
+  const withComments = rows.map((t) => ({ ...t, comments: ctx.comments.list(t.id) }));
+
+  return renderTicketList({
+    workspace: ws,
+    tickets: withComments,
+    statuses,
+    maxlen: num(query.maxlen, 'maxlen'),
+    comments: num(query.comments, 'comments'),
+  });
+}
+
+/**
+ * 单张工单纯文本（契约 4.3），补上 workspace path。
+ * @param {object} [opts]
+ * @param {{event:string, body?:string, actorRole?:string}} [opts.writeEvent]
+ *   本次是写操作时传入，用于在末尾追加状态提醒（契约 5.5.2）；读操作不要传。
+ */
+export function ticketTextView(ctx, ws, ticket, { writeEvent } = {}) {
+  const full = ctx.tickets.get(ticket.id);
+  full.workspace_path = ws ? ws.path : '';
+  const hint = writeEvent
+    ? statusHint({
+        status: full.status,
+        event: writeEvent.event,
+        body: writeEvent.body,
+        actorRole: writeEvent.actorRole,
+      })
+    : null;
+  return renderTicket(full, { workspace: ws, hint });
+}
