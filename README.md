@@ -8,7 +8,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](https://nodejs.org)
 [![MCP](https://img.shields.io/badge/MCP-10%20tools-blueviolet)](docs/CONTRACT.md)
-[![tests](https://img.shields.io/badge/tests-96%20passing-success)](#测试)
+[![tests](https://img.shields.io/badge/tests-99%20passing-success)](#测试)
 [![smoke](https://img.shields.io/badge/smoke-17%20passing-success)](#测试)
 [![no build](https://img.shields.io/badge/build-none-informational)](#为什么不塞个-postgres)
 
@@ -17,6 +17,8 @@
 ![看板：人在浏览器拖拽，AI 在评论里留痕](docs/screenshots/board.png)
 
 **左边**工作区目录，**中间**五列看板（拖拽换列 / 列内排序），**右边**工单详情 —— 全程单页不跳转。评论区分 `user` 与 `ai` 并标出模型名，AI 留过痕的卡片一眼可辨。
+
+> 截图取自演示数据（`scripts/demo-data.mjs` 造的 `demo-project` 工作区），不含任何真实项目信息；提交前用 `scripts/check-screenshots.sh` 做过 OCR 核对。
 
 ---
 
@@ -173,7 +175,7 @@ id: 522dee35-8a59-4ab3-bfa4-2b8ceb184145
 
 ![纯文本视图：同一批数据，AI 读到的就是这段文字](docs/screenshots/plain-text.png)
 
-![纯文本视图：同样的数据，AI 读的是这个](docs/screenshots/plain-text.png)
+> 上面那段代码块是真实输出，一字未改；这张图是它在浏览器里打开 `?format=text` 的样子。
 
 ---
 
@@ -249,7 +251,7 @@ curl -X POST http://localhost:47321/api/tickets/<id>/comments \
 ## 测试
 
 ```bash
-npm test        # 自动化测试（node --test，无需外部依赖）
+npm test        # 103 项自动化测试（node --test，无需外部依赖，随机端口，不碰任何固定端口）
 npm run smoke   # 端到端冒烟，对着运行中的实例跑
 ```
 
@@ -266,6 +268,10 @@ npm run smoke   # 端到端冒烟，对着运行中的实例跑
 
 **多用户 / 多租户？**
 不支持。设计目标是「一个人 + 若干 AI」，单机单用户。角色只有 `user` 和 `ai` 两种，`user` 恒等于你本人。
+
+**依赖有已知漏洞吗？**
+有一个，如实写在这里：依赖 `zod` 3.x，存在已知 **high** 级漏洞 [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5)（校验超大的带约束集合时可能耗尽内存）。修复需升到 zod 4，属破坏性变更（要重写 `src/mcp.js` 里全部 10 个工具的 schema），因此没有混进 v1.0 发布，单独排期处理。
+实际风险低：本项目 schema 未使用该漏洞所需的 `.min()/.max()` 约束集合组合，且默认只监听内网、无公网暴露。自己跑 `npm audit` 会看到它，这里不藏着。
 
 **上传图片有配额吗？**
 没有。单张限 10MB，但总量不限、不清理、不压缩。跑久了记得手动清 `data/uploads/`。

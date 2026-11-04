@@ -33,3 +33,6 @@ docs/note/
 
 # npm pack 产物
 *.tgz
+
+# 截图不进库（含本机真实路径与工单内容），README 用占位说明代替
+docs/screenshots/
