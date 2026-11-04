@@ -48,7 +48,7 @@
       '<div class="app-bar">' +
         '<button class="icon-btn mobile-only" id="bar-hamburger" title="工作区目录" aria-label="工作区目录">' +
           window.icon('menu', 18) + '</button>' +
-        '<a class="brand" href="/" id="brand">' + window.icon('ticket', 18) + '<span>AI 工单</span></a>' +
+        '<a class="brand" href="/" id="brand">' + window.icon('ticket', 18) + '<span>Agents 工单</span></a>' +
         '<span class="spacer"></span>' +
         '<button class="btn sm" id="sync-btn" title="从 DeepSeek Harness 重新同步工作区">' +
           window.icon('refresh-cw', 15) + '<span>同步</span></button>' +
@@ -231,12 +231,12 @@
     pane.innerHTML = '<div class="pane-head">' +
         '<button class="icon-btn mobile-only" id="hamburger2" title="工作区目录" aria-label="工作区目录">' +
           window.icon('menu', 18) + '</button>' +
-        '<h1 class="pane-title">AI 工单</h1>' +
+        '<h1 class="pane-title">Agents 工单</h1>' +
       '</div>' +
       '<div class="pane-empty">' + window.icon('arrow-left', 18) + '<span>从左边选一个工作区</span></div>';
     const h = document.getElementById('hamburger2');
     if (h) h.addEventListener('click', toggleMobileSidebar);
-    document.title = 'AI 工单';
+    document.title = 'Agents 工单';
   }
 
   async function openTicket(seq) {

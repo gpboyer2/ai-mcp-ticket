@@ -97,21 +97,21 @@ test('ticket_list / ticket_get / comment_add 返回 content[0].type=text 且是�
     const addResult = await mcpCall(app.base, 'comment_add', {
       ref: t.ref,
       body: 'AI 通过 MCP 写的评论',
-      actor_id: 'dsh-lead',
-      actor_model: 'group/cherish-ai',
+      actor_id: 'deepseek',
+      actor_model: 'deepseek-v4.1',
     });
     assert.equal(addResult.content[0].type, 'text');
     const addText = addResult.content[0].text;
     assert.ok(!addText.trim().startsWith('{'), 'comment_add 也必须返回纯文本');
     assert.ok(addText.includes('AI 通过 MCP 写的评论'), '返回的是该工单最新全文，必须含新评论');
-    assert.ok(addText.includes('ai:dsh-lead (group/cherish-ai)'), '评论必须带上 model（审计）');
+    assert.ok(addText.includes('ai:deepseek (deepseek-v4.1)'), '评论必须带上 model（审计）');
     assert.ok(addText.includes('## 评论 (1)'), '评论段条数应为 1');
 
     // 落库校验：REST 也能看到这条评论（MCP 与 REST 必须操作同一份数据）
     const viaRest = (await req(app.base, `/api/tickets/${t.id}/comments`)).body;
     assert.equal(viaRest.length, 1);
-    assert.equal(viaRest[0].actor_id, 'dsh-lead');
-    assert.equal(viaRest[0].model, 'group/cherish-ai');
+    assert.equal(viaRest[0].actor_id, 'deepseek');
+    assert.equal(viaRest[0].model, 'deepseek-v4.1');
   } finally {
     await app.close();
   }
@@ -145,7 +145,7 @@ test('写工具缺 actor_id / actor_model 返回 isError（而不是静默写成
     }
 
     // 只给 actor_id 不给 model 也要 isError
-    const half = await mcpCall(app.base, 'comment_add', { ref: t.ref, body: 'z', actor_id: 'dsh-lead' });
+    const half = await mcpCall(app.base, 'comment_add', { ref: t.ref, body: 'z', actor_id: 'deepseek' });
     assert.equal(half.isError, true, '只给 actor_id 不给 actor_model 必须报错');
 
     // 空串也不能混过去
@@ -171,7 +171,7 @@ test('MCP 全套写操作：create → update → comment_add → comment_update
   const app = await startTestApp();
   try {
     await mcpInit(app.base);
-    const AI = { actor_id: 'dsh-lead', actor_model: 'group/cherish-ai' };
+    const AI = { actor_id: 'deepseek', actor_model: 'deepseek-v4.1' };
 
     // create
     const created = await mcpCall(app.base, 'ticket_create', {
@@ -185,7 +185,7 @@ test('MCP 全套写操作：create → update → comment_add → comment_update
     const createdText = created.content[0].text;
     assert.match(createdText, /^# ai-mcp-ticket ticket: demo-project#\d+/, '返回新工单纯文本');
     assert.ok(createdText.includes('priority: 紧急 (3)'), '优先级 3 应显示"紧急"');
-    assert.ok(createdText.includes('by ai:dsh-lead (group/cherish-ai)'), '创建者与 model 要回显');
+    assert.ok(createdText.includes('by ai:deepseek (deepseek-v4.1)'), '创建者与 model 要回显');
     const ref = /ticket: (\S+)/.exec(createdText)[1];
 
     // update

@@ -25,8 +25,10 @@ const DEMO_WS_ID = '00000000-0000-4000-8000-000000000001';
 const DEMO_WS_SLUG = 'demo-project';
 const DEMO_WS_PATH = '/path/to/your/workspace/demo-project';
 
-const AI = { 'X-Actor-Role': 'ai', 'X-Actor-Id': 'dsh-lead', 'X-Actor-Model': 'group/cherish-ai' };
-const AI2 = { 'X-Actor-Role': 'ai', 'X-Actor-Id': 'claude-code', 'X-Actor-Model': 'claude-sonnet-4.5' };
+// 演示用的两个 AI 身份。model 一律用公开可识别的名字 —— 不要把内部模型路由写进
+// 会被截图、被放进 README 的演示数据里。
+const AI = { 'X-Actor-Role': 'ai', 'X-Actor-Id': 'deepseek', 'X-Actor-Model': 'deepseek-v4.1' };
+const AI2 = { 'X-Actor-Role': 'ai', 'X-Actor-Id': 'codex', 'X-Actor-Model': 'gpt-5-codex' };
 
 async function api(path, { method = 'GET', body, headers = {} } = {}) {
   const init = { method, headers: { ...headers } };

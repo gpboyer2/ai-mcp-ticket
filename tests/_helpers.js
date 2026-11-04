@@ -85,8 +85,8 @@ export async function reqText(base, urlPath, headers = {}) {
 /** AI 身份头（契约第 2 节：role=ai 必须自带 id + model） */
 export const AI_HEADERS = Object.freeze({
   'X-Actor-Role': 'ai',
-  'X-Actor-Id': 'dsh-lead',
-  'X-Actor-Model': 'group/cherish-ai',
+  'X-Actor-Id': 'deepseek',
+  'X-Actor-Model': 'deepseek-v4.1',
 });
 
 /** 一次 JSON-RPC 调用（MCP 无状态端点） */

@@ -191,7 +191,7 @@ test('状态提醒：MCP comment_add 返回文本末尾带提醒', async () => {
       method: 'tools/call',
       params: {
         name: 'comment_add',
-        arguments: { ref: t.ref, body: '我处理一下', actor_id: 'dsh-lead', actor_model: 'group/cherish-ai' },
+        arguments: { ref: t.ref, body: '我处理一下', actor_id: 'deepseek', actor_model: 'deepseek-v4.1' },
       },
     });
     const text = r.result.content[0].text;

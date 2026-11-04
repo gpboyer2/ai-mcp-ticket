@@ -173,7 +173,7 @@
     const ws = S.workspace;
     if (titleEl) titleEl.textContent = ws ? (ws.title || ws.slug) : '工单看板';
     if (pathEl) pathEl.textContent = ws ? (ws.path || '') : '';
-    document.title = ws ? ((ws.title || ws.slug) + ' · AI 工单') : 'AI 工单';
+    document.title = ws ? ((ws.title || ws.slug) + ' · Agents 工单') : 'Agents 工单';
   }
 
   function render() {

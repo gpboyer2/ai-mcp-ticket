@@ -27,7 +27,7 @@ role = 'user' | 'ai'
 ```
 
 - `user`：用户本人。固定 `actor id="user"`，`model=null`。
-- `ai`：任何 AI，**必须自我声明 `id` 与 `model`**（`id` 自选标识如 `dsh-lead`，`model` 当前模型如 `group/cherish-ai`）。换模型用新 `model` 写，历史评论保留当时 model，不改写。
+- `ai`：任何 AI，**必须自我声明 `id` 与 `model`**（`id` 自选标识如 `deepseek`，`model` 当前模型如 `deepseek-v4.1`）。换模型用新 `model` 写，历史评论保留当时 model，不改写。
 
 每条写入（工单、评论）记录 `actor_id + role + model + created_at`，这四项是**审计事实，创建后不可改**（正文可改，`updated_at` 随之变）。
 
@@ -197,11 +197,11 @@ comment:
 
 [1] demo-project#12  打开  优先级:高  更新:2026-11-04T03:20:00.000Z
     title: 修复回测空指针
-    by: ai:dsh-lead (group/cherish-ai) at 2026-11-04T03:00:00.000Z
+    by: ai:deepseek (deepseek-v4.1) at 2026-11-04T03:00:00.000Z
     blocked_by: demo-project#11
     body: 复现步骤 1) ... 2) ...
     comments(2):
-      - 2026-11-04T03:10:00.000Z ai:dsh-lead (group/cherish-ai): 已定位到 xxx
+      - 2026-11-04T03:10:00.000Z ai:deepseek (deepseek-v4.1): 已定位到 xxx
       - 2026-11-04T03:15:00.000Z user: 再加一条要求 yyy
 
 [2] demo-project#13  处理中  优先级:普通  更新:...
@@ -222,7 +222,7 @@ comment:
 # ai-mcp-ticket ticket: demo-project#12
 status: 打开 (open)   priority: 高 (2)   position: 1024
 workspace: demo-project  path: /path/to/your/workspace/demo-project
-created: 2026-11-04T03:00:00.000Z by ai:dsh-lead (group/cherish-ai)
+created: 2026-11-04T03:00:00.000Z by ai:deepseek (deepseek-v4.1)
 updated: 2026-11-04T03:20:00.000Z
 blocked_by: demo-project#11
 id: 6f1c...
@@ -231,7 +231,7 @@ id: 6f1c...
 复现步骤 ...
 
 ## 评论 (2)
-- [2026-11-04T03:10:00.000Z] ai:dsh-lead (group/cherish-ai)
+- [2026-11-04T03:10:00.000Z] ai:deepseek (deepseek-v4.1)
   已定位到 xxx
 - [2026-11-04T03:15:00.000Z] user
   再加一条要求 yyy
@@ -256,7 +256,7 @@ id: 6f1c...
 | `comment_update` | `comment_id, body, actor_id, actor_model` | 改评论 |
 | `comment_delete` | `comment_id, actor_id, actor_model` | 删评论 |
 
-MCP 侧写操作 `role=ai`，`actor_id`/`actor_model` 必填（schema 设 required，描述写明「填你自己的身份和模型，例如 dsh-lead / group/cherish-ai」）。
+MCP 侧写操作 `role=ai`，`actor_id`/`actor_model` 必填（schema 设 required，描述写明「填你自己的身份和模型，例如 deepseek-v4.1）。
 
 传输：`POST /mcp`，`StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true })`，每请求新建 server+transport（无状态）。`GET /mcp` 与 `DELETE /mcp` 返回 405 JSON。
 

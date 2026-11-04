@@ -29,9 +29,9 @@ test('评论增删改：正文、身份、model 都正确落库', async () => {
 
     // AI 评论：必须记录当时的 model（契约 1.1：换模型后历史评论保留当时的 model）
     const c2 = await addComment(app.base, t.id, 'AI 说的话', AI_HEADERS);
-    assert.equal(c2.body.actor_id, 'dsh-lead');
+    assert.equal(c2.body.actor_id, 'deepseek');
     assert.equal(c2.body.actor_role, 'ai');
-    assert.equal(c2.body.model, 'group/cherish-ai', 'AI 评论必须落 model');
+    assert.equal(c2.body.model, 'deepseek-v4.1', 'AI 评论必须落 model');
 
     // 列评论：升序（契约 1.4）
     const list = await req(app.base, `/api/tickets/${t.id}/comments`);

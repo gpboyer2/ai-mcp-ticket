@@ -163,13 +163,15 @@ id: 522dee35-8a59-4ab3-bfa4-2b8ceb184145
 ## 评论 (3)
 - [2026-11-04T05:16:52.954Z] user
   卡片右侧还要能直接回评论，不要跳页。
-- [2026-11-04T05:16:52.968Z] ai:dsh-lead (group/cherish-ai)
+- [2026-11-04T05:16:52.968Z] ai:deepseek (deepseek-v4.1)
   已加 with_comments=1，列表一次带回最后一条评论，N+1 消失。
-- [2026-11-04T05:16:52.980Z] ai:dsh-lead (group/cherish-ai)
+- [2026-11-04T05:16:52.980Z] ai:deepseek (deepseek-v4.1)
   顺手把评论按 created_at 升序排了，同毫秒按 rowid。
 ```
 
-注意评论行里的 `user:` 和 `ai:dsh-lead (group/cherish-ai)` —— **谁说的、用什么模型说的**，都在文本里。AI 读一眼就知道上一条是用户提的需求还是另一个 AI 的回复。
+注意评论行里的 `user:` 和 `ai:deepseek (deepseek-v4.1)` —— **谁说的、用什么模型说的**，都在文本里。AI 读一眼就知道上一条是用户提的需求还是另一个 AI 的回复。
+
+![纯文本视图：同一批数据，AI 读到的就是这段文字](docs/screenshots/plain-text.png)
 
 ![纯文本视图：同样的数据，AI 读的是这个](docs/screenshots/plain-text.png)
 
@@ -187,7 +189,7 @@ node scripts/install-dsh-mcp.mjs --remove   # 移除
 
 **工作区不用你建**：本项目只读同步 DSH 的 `~/.dsh/storages/workspace.json`。DSH 里有哪些工作区，这里就有哪些；DSH 里删掉的，这里标记归档（不删，因为可能挂着工单）。启动时同步一次，之后每 60 秒自动再同步。
 
-其它 MCP 宿主（Claude Code、Codex 等）直接配 HTTP 端点即可：
+其它 MCP 宿主直接配 HTTP 端点即可：
 
 ```json
 {
@@ -214,7 +216,7 @@ node scripts/install-dsh-mcp.mjs --remove   # 移除
 
 工单引用形如 `demo-project#12`（工作区 slug + 工作区内自增序号），人和 AI 都好引用。
 
-**不允许匿名 AI**：MCP 写操作的 `actor_id` 和 `actor_model` 是必填项，工具描述里写着「填你自己的身份和模型，例如 dsh-lead / group/cherish-ai」。缺任一个直接 400 `ACTOR_REQUIRED`。
+**不允许匿名 AI**：MCP 写操作的 `actor_id` 和 `actor_model` 是必填项，工具描述里写着「填你自己的身份和模型，例如 deepseek-v4.1 。缺任一个直接 400 `ACTOR_REQUIRED`。
 
 ---
 
@@ -236,7 +238,7 @@ AI 写东西时带这三个头：
 ```bash
 curl -X POST http://localhost:47321/api/tickets/<id>/comments \
   -H 'content-type: application/json' \
-  -H 'X-Actor-Role: ai' -H 'X-Actor-Id: dsh-lead' -H 'X-Actor-Model: group/cherish-ai' \
+  -H 'X-Actor-Role: ai' -H 'X-Actor-Id: deepseek' -H 'X-Actor-Model: deepseek-v4.1' \
   -d '{"body":"已定位到问题在第 42 行"}'
 ```
 

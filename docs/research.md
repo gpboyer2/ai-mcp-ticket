@@ -200,7 +200,7 @@
 | `failOnStartupError` | false | 启动连不上是否让插件激活失败 |
 | `reconnect.*` | enabled, 500ms→30s, 10 次 | 重连策略 |
 
-工具命名：`mcp__ticket__workspace_list` 这种形式，「the same naming shape Claude Code and Codex use」（README:76），且「Names stay stable while the server keeps the same tool name, so session history and permission rules survive restarts and reloads」。
+工具命名：`mcp__ticket__workspace_list` 这种形式。
 
 **⑦ 客户端 SDK 版本与协议协商**
 

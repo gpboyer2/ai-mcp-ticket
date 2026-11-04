@@ -29,9 +29,9 @@ function ticket(over = {}) {
     priority: 2,
     position: 1024,
     blocked_by: 'demo-project#11',
-    actor_id: 'dsh-lead',
+    actor_id: 'deepseek',
     actor_role: 'ai',
-    model: 'group/cherish-ai',
+    model: 'deepseek-v4.1',
     created_at: '2026-11-04T03:00:00.000Z',
     updated_at: '2026-11-04T03:20:00.000Z',
     comments: [
@@ -39,9 +39,9 @@ function ticket(over = {}) {
         id: 'c1',
         ticket_id: '6f1c0000-0000-4000-8000-000000000001',
         body: '已定位到 xxx',
-        actor_id: 'dsh-lead',
+        actor_id: 'deepseek',
         actor_role: 'ai',
-        model: 'group/cherish-ai',
+        model: 'deepseek-v4.1',
         created_at: '2026-11-04T03:10:00.000Z',
         updated_at: '2026-11-04T03:10:00.000Z',
       },
@@ -95,7 +95,7 @@ test('4.2 列表格式：首行 / filter 行 / 提示行 / 条目 / 结尾，逐
   assert.equal(lines[5], '    title: 修复回测空指针', 'title 行必须是 4 空格缩进');
   assert.equal(
     lines[6],
-    '    by: ai:dsh-lead (group/cherish-ai) at 2026-11-04T03:00:00.000Z',
+    '    by: ai:deepseek (deepseek-v4.1) at 2026-11-04T03:00:00.000Z',
     'by 行必须是 `    by: ai:{id} ({model}) at {created_at}`',
   );
   assert.equal(lines[7], '    blocked_by: demo-project#11', 'blocked_by 有值才输出');
@@ -103,7 +103,7 @@ test('4.2 列表格式：首行 / filter 行 / 提示行 / 条目 / 结尾，逐
   assert.equal(lines[9], '    comments(2):', 'comments 块头必须是 `    comments(N):`');
   assert.equal(
     lines[10],
-    '      - 2026-11-04T03:10:00.000Z ai:dsh-lead (group/cherish-ai): 已定位到 xxx',
+    '      - 2026-11-04T03:10:00.000Z ai:deepseek (deepseek-v4.1): 已定位到 xxx',
     'AI 评论必须带 model（审计需要）',
   );
   assert.equal(
@@ -260,7 +260,7 @@ test('4.3 单张工单纯文本格式', () => {
   );
   assert.equal(
     lines[3],
-    'created: 2026-11-04T03:00:00.000Z by ai:dsh-lead (group/cherish-ai)',
+    'created: 2026-11-04T03:00:00.000Z by ai:deepseek (deepseek-v4.1)',
     'created 行必须带创建者与 model',
   );
   assert.equal(lines[4], 'updated: 2026-11-04T03:20:00.000Z');
@@ -273,7 +273,7 @@ test('4.3 单张工单纯文本格式', () => {
 
   const cmtIdx = lines.indexOf('## 评论 (2)');
   assert.ok(cmtIdx > 0, '必须有 `## 评论 (N)` 段，N 是真实条数');
-  assert.equal(lines[cmtIdx + 1], '- [2026-11-04T03:10:00.000Z] ai:dsh-lead (group/cherish-ai)');
+  assert.equal(lines[cmtIdx + 1], '- [2026-11-04T03:10:00.000Z] ai:deepseek (deepseek-v4.1)');
   assert.equal(lines[cmtIdx + 2], '  已定位到 xxx', '评论正文缩进 2 空格');
   assert.equal(lines[cmtIdx + 3], '- [2026-11-04T03:15:00.000Z] user');
   assert.ok(out.includes('# end.'), '必须有结尾行');
@@ -312,7 +312,7 @@ test('工作区索引纯文本：每个工作区带各状态计数', () => {
 });
 
 test('actorLabel：ai 带 model，user 只显示 user，缺 model 有兜底', () => {
-  assert.equal(actorLabel('dsh-lead', 'ai', 'group/cherish-ai'), 'ai:dsh-lead (group/cherish-ai)');
+  assert.equal(actorLabel('deepseek', 'ai', 'deepseek-v4.1'), 'ai:deepseek (deepseek-v4.1)');
   assert.equal(actorLabel('user', 'user', null), 'user', 'user 不能显示 (null)');
   assert.equal(actorLabel('x', 'ai', null), 'ai:x (未知模型)', 'AI 缺 model 时要有可读兜底，不能显示 null');
 });
@@ -332,7 +332,7 @@ test('评论列表纯文本（MCP comment_list 用）：带 id 方便 AI 改删'
   const t = ticket();
   const out = renderCommentList(t, t.comments);
   assert.ok(out.startsWith('# ai-mcp-ticket comments: demo-project#12  (2)'), '首行带 ref 与条数');
-  assert.ok(out.includes('- [2026-11-04T03:10:00.000Z] ai:dsh-lead (group/cherish-ai)'));
+  assert.ok(out.includes('- [2026-11-04T03:10:00.000Z] ai:deepseek (deepseek-v4.1)'));
   assert.ok(out.includes('  id: c1'), '必须给评论 id，否则 AI 无法改/删评论');
   assert.ok(out.trimEnd().endsWith('# end.'));
 

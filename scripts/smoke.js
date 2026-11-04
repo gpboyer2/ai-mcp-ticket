@@ -11,7 +11,7 @@ import process from 'node:process';
 
 const BASE = (process.env.BASE || 'http://127.0.0.1:47321').replace(/\/+$/, '');
 const AI_ID = process.env.SMOKE_ACTOR_ID || 'smoke-runner';
-const AI_MODEL = process.env.SMOKE_ACTOR_MODEL || 'group/cherish-ai';
+const AI_MODEL = process.env.SMOKE_ACTOR_MODEL || 'deepseek-v4.1';
 
 // ---------- 结果记录 ----------
 const results = [];

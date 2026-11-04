@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "AI 工单系统：人看网页（拖拽/评论），AI 读纯文本（MCP + text/plain URL），数据存 SQLite，工作区只读同步自 DeepSeek Harness",
+  "description": "Agents 工单系统：人看网页（拖拽/评论），AI 读纯文本（MCP + text/plain URL），数据存 SQLite，工作区只读同步自 DeepSeek Harness",
   "engines": {
     "node": ">=22"
   },

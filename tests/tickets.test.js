@@ -40,8 +40,8 @@ test('新建：默认 status=open / priority=1，且审计字段齐全', async (
     // AI 身份建单要记录 model
     const ai = await createTicket(app.base, { title: 'AI 建的' }, AI_HEADERS);
     assert.equal(ai.body.actor_role, 'ai');
-    assert.equal(ai.body.actor_id, 'dsh-lead');
-    assert.equal(ai.body.model, 'group/cherish-ai', 'AI 的 model 必须落库（契约 1.1 审计事实）');
+    assert.equal(ai.body.actor_id, 'deepseek');
+    assert.equal(ai.body.model, 'deepseek-v4.1', 'AI 的 model 必须落库（契约 1.1 审计事实）');
   } finally {
     await app.close();
   }

@@ -20,11 +20,11 @@ const actorFields = {
   actor_id: z
     .string()
     .min(1)
-    .describe('你自己的身份标识，必填。填你自己的名字，例如 dsh-lead、claude-code'),
+    .describe('你自己的身份标识，必填。填你自己的名字，例如 dsh-lead、deepseek'),
   actor_model: z
     .string()
     .min(1)
-    .describe('你当前正在使用的模型名，必填。例如 group/cherish-ai、claude-sonnet-4.5'),
+    .describe('你当前正在使用的模型名，必填。例如 group/cherish-ai、deepseek-v4.1'),
 };
 
 const READ = { readOnlyHint: true, openWorldHint: false };
