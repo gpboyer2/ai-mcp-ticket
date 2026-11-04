@@ -42,6 +42,21 @@
       if (!btn) return;
       onClaimClick(btn.getAttribute('data-claim'));
     });
+    // #6：详情是浮层，点它外面就关掉。
+    // 用 pointerdown 而非 click：点看板卡片时先关旧详情，卡片再开新详情；
+    // 若用 click，卡片的 click 先跑、刚开的详情会被这里误关。
+    // 弹窗(.overlay)/抽屉(.drawer)/菜单(.menu)/toast/顶栏(.app-bar) 这些浮层不算「外面」。
+    document.addEventListener('pointerdown', onOutsidePointerDown);
+  }
+
+  // #6：点详情面板之外的区域自动关闭
+  function onOutsidePointerDown(e) {
+    if (!open || !rootEl) return;
+    if (rootEl.contains(e.target)) return;
+    if (e.target.closest && e.target.closest('.overlay, .drawer, .menu, #toast-root, .app-bar')) return;
+    T.emit('detail:close');
+  }
+
   // 认领 / 释放：成功后只刷新 meta（不整页重渲染），并让看板重新拉一次数据
   async function onClaimClick(action) {
     if (!ticket || claimBusy) return;
@@ -152,7 +167,6 @@
 
       // ② 操作工具栏：右对齐一组
       '<div class="detail-toolbar">' +
-        '<span class="dt-ref" id="d-ref-inline">' + T.esc(t.ref || '') + '</span>' +
         '<span class="spacer"></span>' +
         '<select class="select sm" id="d-status" title="改状态">' +
           T.STATUS.map(function (s) {
@@ -174,12 +188,16 @@
           window.icon('trash-2', 13) + '<span>删除</span></button>' +
       '</div>' +
 
-      // ③ 内容区：正文（没有「正文」这种分组标题，直接是内容）
-      '<div class="content-block">' +
-        '<div class="body-text' + (t.body ? '' : ' empty') + '" id="d-text">' +
-          (t.body ? window.Images.renderMarkdownImages(t.body) : '<span class="content-empty">还没有内容</span>') +
-        '</div>' +
-      '</div>' +
+      // ③ 内容区：完整内容（首行即正文第一行，不再被抽成「标题」截走）
+      (function () {
+        const full = T.joinMerged(t);
+        return '' +
+          '<div class="content-block">' +
+            '<div class="body-text' + (full ? '' : ' empty') + '" id="d-text">' +
+              (full ? window.Images.renderMarkdownImages(full) : '<span class="content-empty">还没有内容</span>') +
+            '</div>' +
+          '</div>';
+      })() +
 
       // ④ 评论区：分组标题 + 分隔线，和正文拉开呼吸感
       '<div class="comments-block">' +
@@ -265,8 +283,6 @@
     if (st) st.value = t.status;
     const pr = document.getElementById('d-priority');
     if (pr) pr.value = String(t.priority);
-    const refInline = document.getElementById('d-ref-inline');
-    if (refInline) refInline.textContent = t.ref || '';
   }
 
   /* ---------------- 事件 ---------------- */

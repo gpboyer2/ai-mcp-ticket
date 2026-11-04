@@ -143,18 +143,22 @@
 .quick-add .input { flex: 1 1 auto; }
 .quick-add .hint { flex: 0 0 auto; font-size: 11px; color: var(--muted); align-self: center; }
 
-/* ---------------- 右栏：详情 ---------------- */
+/* ---------------- 右栏：详情（浮层，不挤占看板宽度） ---------------- */
 .detail-pane {
-  flex: 0 0 420px;
+  position: fixed;
+  top: 44px;            /* 让开顶栏 */
+  right: 0;
+  bottom: 0;
   width: 420px;
   min-width: 300px;
   max-width: 70vw;
   background: var(--card);
   border-left: 1px solid var(--border);
+  box-shadow: -6px 0 24px rgba(16, 24, 40, .10);
   display: flex;
   flex-direction: column;
   min-height: 0;
-  position: relative;
+  z-index: 80;
 }
 .detail-pane.hidden { display: none; }
 .detail-pane .pane-head {
@@ -225,16 +229,11 @@
   .sidebar.collapsed .ws-item .ws-mini { display: revert; }
   .sidebar.collapsed .ws-item { text-align: left; padding: 7px 8px; font-weight: 400; }
 
-  /* 右栏变浮层，覆盖中栏 */
+  /* 右栏浮层：窄屏更窄一点（它已是 fixed 浮层，这里只调宽度/层级/阴影） */
   .detail-pane {
-    position: fixed;
-    top: 44px;
-    right: 0;
-    bottom: 0;
-    z-index: 100;
     width: min(460px, 92vw);
-    flex-basis: auto;
     max-width: 92vw;
+    z-index: 100;
     box-shadow: -8px 0 30px rgba(0, 0, 0, .22);
   }
   .resize-handle { display: none; }

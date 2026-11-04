@@ -105,7 +105,8 @@
     });
     T.on('detail:rendered', function () { Board.renderColumns(); });
     T.on('board:filter', function () { loadTickets(); });
-    T.on('board:reload', function () { loadTickets(true); });
+    // #61：reload 完成后要回调（新建工单后滚动定位靠它）
+    T.on('board:reload', function (done) { loadTickets(done); });
     T.on('board:changed', function () { refreshWorkspaceCounts(); });
 
     // Esc 关右栏
@@ -155,9 +156,14 @@
     }
   }
 
-  async function loadTickets() {
+  /**
+   * 拉工单并重绘看板
+   * @param {Function} [done] 重绘完成后回调（#61 新建后要用它来滚动定位）
+   */
+  async function loadTickets(done) {
     if (!S.ws) {
       S.tickets = [];
+      if (typeof done === 'function') done();
       return;
     }
     try {
@@ -170,6 +176,7 @@
       S.workspace = (data && data.workspace) || S.workspace;
       S.counts = T.normalizeCounts(data && data.counts, S.tickets);
       Board.render();
+      if (typeof done === 'function') done();
     } catch (err) {
       // M3：不能静默显示成「没有工单」——必须让用户知道是加载失败了
       T.toast('加载工单失败：' + err.message, 'error');

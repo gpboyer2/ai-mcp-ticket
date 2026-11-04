@@ -37,7 +37,10 @@
           T.esc(T.truncate((last.actor_role === 'ai' ? 'AI：' : '我：') + last.body, 80)) + '</span></div>'
       : '';
     const active = Number(t.seq) === Number(S.detailSeq) ? ' active' : '';
-    return '<div class="card st-' + T.esc(t.status) + active + '" draggable="true" ' +
+    // #61：刚新建的那张卡，先带一个高亮类，1.6 秒后淡出
+    const justNew = (S.newlyCreatedSeq != null && Number(t.seq) === Number(S.newlyCreatedSeq))
+      ? ' just-created' : '';
+    return '<div class="card st-' + T.esc(t.status) + active + justNew + '" draggable="true" ' +
         'data-id="' + T.esc(t.id) + '" data-seq="' + T.esc(t.seq) + '" data-status="' + T.esc(t.status) + '">' +
       '<div class="card-top">' +
         '<span class="ref">' + T.esc(t.ref || '') + '</span>' +
@@ -83,6 +86,61 @@
     }
   }
 
+  /* ---------------- #61：新建成功后滚动并激活 ---------------- */
+  // 如果当前筛选会把新工单藏起来，先清掉（否则滚过去是空白）
+  function clearFiltersIfHides(created) {
+    var cleared = [];
+    if (S.q) { S.q = ''; cleared.push('搜索'); }
+    if (S.statusFilter && created.status && S.statusFilter.indexOf(created.status) === -1) {
+      S.statusFilter = ''; cleared.push('状态筛选');
+    }
+    if (cleared.length) {
+      var se = document.getElementById('search');
+      if (se) se.value = '';
+      T.toast('已清除' + cleared.join('和') + '，方便你看到新工单');
+      return true; // 需要重新拉一次数据
+    }
+    return false;
+  }
+
+  /**
+   * 把刚建好的工单「亮出来」：滚到它、短暂高亮、并在右栏打开详情。
+   * 内部会处理「筛选把新工单藏了」的情况（清筛选后重新拉一次）。
+   * @param {Object} created 后端返回的工单对象（至少有 id / seq / status）
+   */
+  function revealCreated(created) {
+    if (!created || created.id == null) return;
+    doScrollAndHighlight(created);
+  }
+
+  function doScrollAndHighlight(created) {
+    // ② 打上「刚创建」标记，让下一次 render 时这张卡带高亮
+    S.newlyCreatedSeq = created.seq;
+
+    // ③ 等看板重绘完再滚动（数据异步，最多重试 10 次约 1 秒）
+    function attempt(n) {
+      n = n || 0;
+      var card = document.querySelector('.card[data-id="' + created.id + '"]');
+      if (!card) {
+        if (n < 10) return setTimeout(function () { attempt(n + 1); }, 100);
+        return;
+      }
+      // 滚动到可见位置（nearest 不会把页面乱跳，只保证它在视野内）
+      try {
+        card.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+      } catch (e) {
+        card.scrollIntoView(); // 老浏览器降级
+      }
+      // 高亮脉冲：加类 -> 动画跑完摘掉（时长与 CSS .just-created 一致）
+      card.classList.add('just-created');
+      setTimeout(function () {
+        if (card) card.classList.remove('just-created');
+        if (S.newlyCreatedSeq === created.seq) S.newlyCreatedSeq = null;
+      }, 1600);
+    }
+    setTimeout(function () { attempt(0); }, 60);
+  }
+
   /* ---------------- 骨架 ---------------- */
   function mount(container) {
     rootEl = container;
@@ -116,7 +174,14 @@
     }, 280));
     document.getElementById('new-btn').addEventListener('click', function () {
       if (!S.ws) return T.toast('请先选一个工作区', 'error');
-      window.Editor.openCreate(S.ws, function () { T.emit('board:reload'); });
+      window.Editor.openCreate(S.ws, function (created) {
+        // #61：弹窗新建成功后同样滚动+高亮+右栏打开
+        clearFiltersIfHides(created);
+        T.emit('board:reload', function () {
+          revealCreated(created);
+          T.emit('ticket:open', created);
+        });
+      });
     });
     document.getElementById('refresh-btn').addEventListener('click', function () {
       const b = document.getElementById('refresh-btn');
@@ -155,7 +220,12 @@
         const created = await T.API.createTicket(S.ws, { title: parsed.title, body: parsed.body });
         quick.value = '';
         T.toast('已创建 ' + (created && created.ref ? created.ref : ''), 'ok');
-        T.emit('board:reload');
+        // #61：先清掉会挡住它的筛选，再刷新看板，然后滚动+高亮+右栏打开
+        clearFiltersIfHides(created);
+        T.emit('board:reload', function () {
+          revealCreated(created);
+          T.emit('ticket:open', created);
+        });
       } catch (err) {
         T.toast('创建失败：' + err.message, 'error');
       } finally {
@@ -366,6 +436,6 @@
 
   window.Board = {
     mount: mount, render: render, renderColumns: renderColumns,
-    focusSearch: focusSearch, showLoadError: showLoadError
+    focusSearch: focusSearch, showLoadError: showLoadError, revealCreated: revealCreated
   };
 })();

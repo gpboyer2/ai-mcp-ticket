@@ -876,30 +876,35 @@ html[data-theme="dark"] .deps-list { box-shadow: 0 12px 32px rgba(0, 0, 0, .5), 
    两段式：元信息条 + 内容（正文 → 分隔线 → 评论）
    ========================================================================== */
 
-/* ① 元信息条：一行 chip，统一间距、统一高度 */
+/* ① 元信息条：一行 tag，紧凑、轻量边框，不做厚重圆角卡片 */
 .meta-bar {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
-  margin: 2px 0 10px;
+  gap: 4px 5px;
+  margin: 2px 0 9px;
 }
+/* tag 形态：小圆角 + 细边 + 轻底色，文字紧凑；不堆砌圆角卡片 */
 .meta-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  height: var(--h-sm);
-  padding: 0 9px;
-  border-radius: 999px;
-  font-size: 11.5px;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.6;
   color: var(--muted);
   background: var(--bg-soft);
   border: 1px solid var(--border);
   white-space: nowrap;
 }
 .meta-chip .ic { flex: 0 0 auto; opacity: .85; }
-.meta-chip.meta-status { padding-left: 7px; }
+.meta-chip.meta-status { padding-left: 5px; }
 /* 状态 chip 里的徽标不要再套一层背景 */
+.meta-chip .status-badge { font-size: 11px; gap: 4px; }
+/* 优先级在 chip 内不做嵌套圆角药丸，只留文字颜色，整体更扁平 */
+.meta-chip .pill { padding: 0; border-radius: 0; background: transparent; font-size: 11px; }
+
 /* 认领 chip（契约 3.2）：未认领时它本身是个按钮；本人认领后带一个「释放」按钮。
    一律沿用 .meta-chip 的外形，后续重排 meta-bar 样式时不必单独照顾它。 */
 button.meta-chip.meta-claim {
@@ -925,7 +930,6 @@ button.meta-chip.meta-claim:hover { background: color-mix(in srgb, var(--accent)
   cursor: pointer;
 }
 .meta-chip .chip-btn:hover { color: var(--accent); text-decoration: underline; }
-.meta-chip .status-badge { font-size: 11.5px; }
 
 /* ② 操作工具栏：右对齐一组，不再散落 */
 .detail-toolbar {
@@ -933,18 +937,12 @@ button.meta-chip.meta-claim:hover { background: color-mix(in srgb, var(--accent)
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-  padding: 8px 0 10px;
+  padding: 6px 0 8px;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 .detail-toolbar .spacer { flex: 1 1 auto; }
 .detail-toolbar .select { width: auto; min-width: 84px; }
-.dt-ref {
-  font-family: var(--mono);
-  font-size: 11.5px;
-  color: var(--muted);
-  user-select: all;
-}
 
 /* ③ 内容区：没有「正文」标题，直接是内容 */
 .content-block { margin-bottom: 18px; }
@@ -1031,3 +1029,40 @@ button.meta-chip.meta-claim:hover { background: color-mix(in srgb, var(--accent)
   user-select: all;
 }
 .ai-url-row .btn { flex: 0 0 auto; }
+
+/* ==========================================================================
+   #61：新建工单后，卡片短暂高亮脉冲（1.6s 后由 JS 摘掉 .just-created）
+   用 --accent 体系，深浅色都能看清
+   ========================================================================== */
+@keyframes justCreatedPulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent),
+                0 0 0 1px var(--accent);
+    background: color-mix(in srgb, var(--accent) 16%, var(--card));
+  }
+  60% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 22%, transparent),
+                0 0 0 1px var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, var(--card));
+  }
+  100% {
+    box-shadow: 0 0 0 10px transparent, 0 0 0 0 transparent;
+    background: var(--card);
+  }
+}
+
+.card.just-created {
+  animation: justCreatedPulse 1.6s ease-out;
+  border-color: var(--accent) !important;
+  position: relative;
+  z-index: 1;
+}
+
+/* 动效敏感的用户：只留边框提示，不闪 */
+@media (prefers-reduced-motion: reduce) {
+  .card.just-created {
+    animation: none;
+    box-shadow: 0 0 0 2px var(--accent);
+    border-color: var(--accent) !important;
+  }
+}
