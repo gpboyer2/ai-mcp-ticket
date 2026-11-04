@@ -409,9 +409,24 @@
       }
     });
     document.body.appendChild(drawer);
-    document.addEventListener('keydown', function escClose(e) {
-      if (e.key === 'Escape') { drawer.remove(); document.removeEventListener('keydown', escClose); }
-    });
+
+    // 统一的收尾：移除抽屉 + 摘掉两个全局监听，避免泄漏
+    function closeDrawer() {
+      drawer.remove();
+      document.removeEventListener('keydown', onEsc);
+      document.removeEventListener('mousedown', onOutside);
+    }
+    function onEsc(e) { if (e.key === 'Escape') closeDrawer(); }
+
+    // 用户补充（#46）：这个抽屉点外面可以直接收回 —— 它只展示一条 URL，没有未保存内容，
+    // 不属于「点了外面就丢东西」的表单弹窗，所以维持点外关闭的交互。
+    function onOutside(e) {
+      if (!drawer.contains(e.target)) closeDrawer();
+    }
+    document.addEventListener('keydown', onEsc);
+    // 延迟挂载，避免「点开抽屉的那一次点击」立刻把它关掉
+    setTimeout(function () { document.addEventListener('mousedown', onOutside); }, 0);
+
     return drawer;
   }
 

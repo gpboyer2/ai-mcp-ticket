@@ -13,6 +13,10 @@
 
 > **In English:** A ticket system where humans get a drag-and-drop kanban in the browser, while AI agents read the *same* tickets as plain text via `Accept: text/plain` or 10 MCP tools — no JSON bloat. One Node process, one SQLite file, zero build step. Workspaces auto-sync from DeepSeek Harness.
 
+![看板：人在浏览器拖拽，AI 在评论里留痕](docs/screenshots/board.png)
+
+**左边**工作区目录，**中间**五列看板（拖拽换列 / 列内排序），**右边**工单详情 —— 全程单页不跳转。评论区分 `user` 与 `ai` 并标出模型名，AI 留过痕的卡片一眼可辨。
+
 ---
 
 ## 目录
@@ -118,7 +122,7 @@ npm start
 
 换端口：`PORT=8080 npm start`。
 
-> **首次启动需要工作区数据。** 工作区是**只读同步**自 DeepSeek Harness 的，没有「手动新建工作区」的入口 —— 所以没装 DSH 时列表是空的，看板也就无从下手。用演示数据脚本可以先看到界面：`node scripts/demo-data.mjs`（详见 [FAQ](#faq--已知限制)）。
+> **看板是空的？** 工作区是只读同步自 DeepSeek Harness 的，没装 DSH 时列表为空。跑一条命令灌入演示数据：`node scripts/demo-data.mjs`（需要先按 [FAQ](#faq--已知限制) 里「工作区列表是空的」一节让服务能看到一个 `demo-project` 工作区）。
 
 ---
 
@@ -163,6 +167,8 @@ id: 522dee35-8a59-4ab3-bfa4-2b8ceb184145
 ```
 
 注意评论行里的 `user:` 和 `ai:dsh-lead (group/cherish-ai)` —— **谁说的、用什么模型说的**，都在文本里。AI 读一眼就知道上一条是用户提的需求还是另一个 AI 的回复。
+
+![纯文本视图：同样的数据，AI 读的是这个](docs/screenshots/plain-text.png)
 
 ---
 
@@ -220,6 +226,8 @@ node scripts/install-dsh-mcp.mjs --remove   # 移除
 
 同一个 AI 换了模型，就用新的 `model` 写；历史评论保留当时的 model，不改写。所以回头看一条工单，你能准确知道「这句话是哪个模型在什么时候说的」。
 
+![工单详情：user 与 ai 评论分色，AI 评论带 model 标签](docs/screenshots/detail.png)
+
 AI 写东西时带这三个头：
 
 ```bash
@@ -259,11 +267,18 @@ npm run smoke   # 17 项端到端冒烟，对着运行中的实例跑
 不能。工单属于某个工作区，`ref` 里带工作区 slug。要换工作区，就新建一张。
 
 **工作区列表是空的？**
-说明没找到 DSH 的 `workspace.json`。要么装 DSH，要么设 `DSH_HOME` 指向一个有 `storages/workspace.json` 的目录。数据格式：
+说明没找到 DSH 的 `workspace.json`。要么装 DSH，要么手工造一个演示数据源：
 
-```json
-{ "tables": { "workspaces": { "<uuid>": { "path": "/path/to/project", "title": "项目名" } } } }
+```bash
+mkdir -p ~/demo-dsh/storages
+cat > ~/demo-dsh/storages/workspace.json <<'EOF'
+{"tables":{"workspaces":{"00000000-0000-4000-8000-000000000001":{"path":"/path/to/your/workspace/demo-project","title":"demo-project"}}}}
+EOF
+DSH_HOME=~/demo-dsh npm start
+node scripts/demo-data.mjs     # 灌入 6 张演示工单 + 人机评论
 ```
+
+数据格式：`{"tables":{"workspaces":{"<uuid>":{"path":"/path/to/project","title":"项目名"}}}}`。演示数据可用 `node scripts/demo-data.mjs --reset` 清掉重灌；删除演示工作区本身，把 `workspace.json` 里那条记录去掉再同步即可。
 
 **能不用 DSH 吗？**
 能。工作区同步是可选便利，不是依赖。REST API 和 MCP 工具都不依赖 DSH。
