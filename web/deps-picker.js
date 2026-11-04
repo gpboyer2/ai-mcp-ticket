@@ -1,7 +1,7 @@
 /* ==========================================================================
    deps-picker.js —— 依赖（blocked_by）可搜索多选下拉（契约 6.4 / 工单 ai-剧本#15）
-   - 输入即过滤当前工作区工单（ref + title 模糊），最多 20 条
-   - 每条显示 `{ref}  {title}  状态`
+   - 输入即过滤当前工作区工单（ref + 内容预览模糊），最多 20 条
+   - 每条显示 `{ref}  {内容预览}  状态`
    - 键盘：上下方向键移动、回车选中、Esc 关闭
    - 多选：已选显示为可删除的 chip，值存逗号分隔 ref
    ========================================================================== */
@@ -27,7 +27,7 @@
     mountEl.innerHTML =
       '<div class="deps-chips"></div>' +
       '<input class="input deps-input" type="text" autocomplete="off" ' +
-        'placeholder="搜索工单号或标题，回车选中；可多选">' +
+        'placeholder="搜索工单号或内容，回车选中；可多选">' +
       '<div class="deps-list" hidden></div>';
 
     const chipsEl = mountEl.querySelector('.deps-chips');
@@ -84,7 +84,7 @@
       if (k) {
         arr = arr.filter(function (t) {
           return String(t.ref).toLowerCase().indexOf(k) !== -1 ||
-                 String(t.title || '').toLowerCase().indexOf(k) !== -1;
+                 T.cardPreview(t).toLowerCase().indexOf(k) !== -1;
         });
       }
       filtered = arr.slice(0, MAX_ITEMS);
@@ -132,7 +132,7 @@
           'role="option" aria-selected="' + (i === cursor) + '" data-idx="' + i + '">' +
           '<span class="pop-item-main">' +
             '<span class="r">' + T.esc(t.ref) + '</span>' +
-            '<span class="t">' + T.esc(t.title || '(无标题)') + '</span>' +
+            '<span class="t">' + T.esc(T.cardPreview(t) || '(无内容)') + '</span>' +
           '</span>' +
           '<span class="s" style="color:' + (T.STATUS_COLOR[t.status] || 'var(--muted)') + '">' +
             window.icon(T.STATUS_ICON[t.status] || 'circle', 12) +

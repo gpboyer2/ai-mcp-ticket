@@ -3,7 +3,7 @@
    1) 主题（深浅色，localStorage 记忆，默认跟随系统）
    2) REST API（写请求一律带 X-Actor-Role: user）
    3) 通用 UI：toast、弹窗、右键菜单、AI 视角抽屉
-   4) 「标题+正文合并成一个输入框」的拆解/拼回（契约 6.3）
+   4) 卡片预览：工单只有 content 一个内容字段，卡片只取它的第一行
    5) 全局状态 store 与页面间广播
    ========================================================================== */
 (function () {
@@ -36,7 +36,7 @@
   PRIORITY.forEach(function (p) { PRIORITY_LABEL[p.value] = p.label; PRIORITY_ICON[p.value] = p.icon; });
 
   const STEP = 1024;
-  const TITLE_MAX = 200;
+  const PREVIEW_MAX = 80;   // 卡片上那行预览最多显示多少字
 
   /* ---------------- 主题 ---------------- */
   const THEME_KEY = 'ai-mcp-ticket-theme';
@@ -201,33 +201,16 @@
     return cs && cs.length ? cs[cs.length - 1] : null;
   }
 
-  /* ---------------- 标题/正文合并输入框（契约 6.3） ---------------- */
-  // 提交：第一行（去掉行首 #、-、*、空白）作 title，其余行作 body
-  function splitMerged(text) {
-    const raw = String(text || '').replace(/\r\n/g, '\n');
-    const lines = raw.split('\n');
-    let idx = -1;
+  /* ---------------- 卡片预览 ---------------- */
+  // 工单只有 content 一个内容字段（契约 1.3）：卡片上那行字只是 content 第一行的预览，
+  // 不是独立字段。去掉行首的 #、-、* 与空白，免得 Markdown 记号原样漏到卡片上。
+  function cardPreview(t) {
+    const lines = String((t && t.content) || '').replace(/\r\n/g, '\n').split('\n');
     for (let i = 0; i < lines.length; i++) {
-      if (lines[i].trim()) { idx = i; break; }
+      const line = lines[i].replace(/^[#\-*\u3000\s]+/, '').trim();
+      if (line) return truncate(line, PREVIEW_MAX);
     }
-    if (idx === -1) return { title: '', body: '' };
-
-    const titleLine = lines[idx].trim().replace(/^[#\-*\u3000\s]+/, '').trim();
-    let bodyLines = lines.slice(idx + 1);
-    let title = titleLine;
-    if (title.length > TITLE_MAX) {
-      // 标题超长：截断，溢出的部分并回正文开头，不丢用户内容
-      bodyLines = [titleLine.slice(TITLE_MAX)].concat(bodyLines);
-      title = titleLine.slice(0, TITLE_MAX);
-    }
-    return { title: title, body: bodyLines.join('\n').replace(/^\n+/, '').replace(/\s+$/, '') };
-  }
-
-  // 编辑：把 title 与 body 拼回一个框
-  function joinMerged(t) {
-    const title = String((t && t.title) || '');
-    const body = String((t && t.body) || '');
-    return body ? title + '\n\n' + body : title;
+    return '';
   }
 
   /* ---------------- toast ---------------- */
@@ -487,7 +470,7 @@
         desc: '末尾的 <code>?status=</code> 可换成任意组合：' +
           '<code>open</code>（打开）、<code>in_progress</code>（处理中）、<code>reopened</code>（重新打开）、' +
           '<code>done</code>（已完成）、<code>cancelled</code>（已取消）；不写就是全部。' +
-          '再加 <code>&amp;q=关键词</code> 可搜索，<code>&amp;maxlen=0</code> 正文不截断。'
+          '再加 <code>&amp;q=关键词</code> 可搜索，<code>&amp;maxlen=0</code> 内容不截断。'
       }) +
       urlCard({
         title: '③ 单张工单的全文（含全部评论）',
@@ -515,9 +498,9 @@
         '  -H "X-Actor-Id: your-agent-name" \\',
         '  -H "X-Actor-Role: ai" \\',
         '  -H "X-Actor-Model: your-model-name" \\',
-        '  -d \'{"title":"标题","body":"正文","priority":1,"status":"open"}\'',
+        '  -d \'{"content":"第一行作卡片预览\\n\\n其余内容","priority":1,"status":"open"}\'',
         '',
-        '# 改状态 / 改优先级 / 改正文（局部更新）',
+        '# 改状态 / 改优先级 / 改内容（局部更新）',
         'curl -X PATCH ' + origin + '/api/tickets/{id} \\',
         '  -H "Content-Type: application/json" \\',
         '  -H "X-Actor-Id: your-agent-name" \\',
@@ -633,12 +616,12 @@
   window.TT = {
     STATUS: STATUS, STATUS_LABEL: STATUS_LABEL, STATUS_COLOR: STATUS_COLOR, STATUS_ICON: STATUS_ICON,
     PRIORITY: PRIORITY, PRIORITY_LABEL: PRIORITY_LABEL, PRIORITY_ICON: PRIORITY_ICON,
-    STEP: STEP, TITLE_MAX: TITLE_MAX,
+    STEP: STEP, PREVIEW_MAX: PREVIEW_MAX,
     api: api, API: API,
     esc: esc, fmtTime: fmtTime, timeTag: timeTag, priorityPill: priorityPill,
     statusBadge: statusBadge, statusDot: statusDot, depsList: depsList,
     actorText: actorText, truncate: truncate, debounce: debounce, lastComment: lastComment,
-    splitMerged: splitMerged, joinMerged: joinMerged,
+    cardPreview: cardPreview,
     toast: toast, toastWithAction: toastWithAction,
     openModal: openModal, confirmDialog: confirmDialog,
     openMenu: openMenu, closeMenus: closeMenus,

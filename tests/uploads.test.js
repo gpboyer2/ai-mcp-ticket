@@ -14,7 +14,7 @@ test('with_comments=1 附带 comments 数组；不带时不返回（省流量）
   const app = await startTestApp();
   try {
     const t = (
-      await req(app.base, `/api/workspaces/${WS}/tickets`, { method: 'POST', body: { title: '带评论' } })
+      await req(app.base, `/api/workspaces/${WS}/tickets`, { method: 'POST', body: { content: '带评论' } })
     ).body;
     await req(app.base, `/api/tickets/${t.id}/comments`, { method: 'POST', body: { body: '第一条' } });
     await req(app.base, `/api/tickets/${t.id}/comments`, { method: 'POST', body: { body: '第二条' } });
@@ -129,7 +129,7 @@ test('纯文本视图原样保留 Markdown 图片 URL（契约 3.5 末条）', a
     const t = (
       await req(app.base, `/api/workspaces/${WS}/tickets`, {
         method: 'POST',
-        body: { title: '带图工单', body: '截图如下 ![](/uploads/20261104-a1b2c3d4.png) 请看' },
+        body: { content: '带图工单\n\n截图如下 ![](/uploads/20261104-a1b2c3d4.png) 请看' },
       })
     ).body;
     const txt = await reqText(app.base, `/${WS}/t/list.txt`.replace('/list.txt', `/${t.seq}.txt`), {

@@ -63,16 +63,16 @@ curl -H 'Accept: text/plain' http://localhost:47321/demo-project/list
 # 提示: 读 /demo-project/list?status=... 拿最新；写评论用 POST /api/tickets/{id}/comments，需带 X-Actor-Id/X-Actor-Role/X-Actor-Model
 
 [1] demo-project#2  打开  优先级:普通  更新:2026-11-04T05:16:15.277Z
-    title: 纯文本列表在 status 过滤下仍返回全量 counts
     by: user at 2026-11-04T05:16:15.277Z
-    body: counts 不受筛选影响，否则看板上的数字会跳。
+    content: 纯文本列表在 status 过滤下仍返回全量 counts
+      counts 不受筛选影响，否则看板上的数字会跳。
 
 # end. 用 ?status= 过滤，?format=text 强制纯文本
 ```
 
 同样的数据，MCP 工具 `ticket_list` 返回的也是这段文本（`content: [{type:'text'}]`），**不是 JSON**。渲染只有一份实现（`src/render/text.js`），REST / 网页 / MCP 三处共用，格式不会漂移。
 
-还带 `?maxlen=` 截正文、`?comments=N` 只取最后 N 条 —— 让 AI 自己控制读多少。
+还带 `?maxlen=` 截内容、`?comments=N` 只取最后 N 条 —— 让 AI 自己控制读多少。
 
 ---
 
@@ -144,7 +144,7 @@ npm start
 | 工作区索引（含各状态工单数） | `/?format=text` |
 | 某工作区工单列表 | `/demo-project/list.txt` |
 | 只要打开的和处理中的 | `/demo-project/list.txt?status=open,in_progress` |
-| 只显示最后 3 条评论、正文截 300 字 | `/demo-project/list.txt?comments=3&maxlen=300` |
+| 只显示最后 3 条评论、内容截 300 字 | `/demo-project/list.txt?comments=3&maxlen=300` |
 | 单张工单全文 | `/demo-project/t/12.txt` |
 
 **日常用法**：在网页上把活拆成工单，然后把 URL 贴给 AI：「读这个 URL，把里面的工单处理掉」。
@@ -159,7 +159,7 @@ created: 2026-11-04T05:16:15.261Z by user
 updated: 2026-11-04T05:16:52.980Z
 id: 522dee35-8a59-4ab3-bfa4-2b8ceb184145
 
-## 正文
+## 内容
 一屏 30 张卡时前端不要对每张卡再发一次请求。
 
 ## 评论 (3)
@@ -210,7 +210,7 @@ node scripts/install-dsh-mcp.mjs --remove   # 移除
 | 工具 | 作用 |
 |---|---|
 | `workspace_list` | 工作区列表（含各状态计数） |
-| `ticket_list` | 工单列表（可按 status / 关键词过滤，控制正文长度与评论条数） |
+| `ticket_list` | 工单列表（可按 status / 关键词过滤，控制内容长度与评论条数） |
 | `ticket_get` | 单张工单全文 |
 | `ticket_create` / `ticket_update` / `ticket_delete` | 增 / 改 / 删工单 |
 | `comment_list` | 评论列表 |

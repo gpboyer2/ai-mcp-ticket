@@ -1,15 +1,24 @@
 // 端到端冒烟：对着一个**真实运行**的实例跑完整业务流（默认 http://127.0.0.1:47321）。
 // 用法：
-//   node scripts/smoke.js                        # 打 47321
-//   BASE=http://127.0.0.1:8080 node scripts/smoke.js
+//   node scripts/smoke.js                        # 打默认端口 47321（真实实例）
+//   PORT=47399 node scripts/smoke.js             # 打指定端口（自测实例）
+//   BASE=http://127.0.0.1:8080 node scripts/smoke.js   # 打任意地址（优先于 PORT）
+//
+// 为什么同时认 PORT 和 BASE：本项目其他所有地方（server.js / ticket.sh）统一用 PORT 表达端口，
+// 只有这里原来单认 BASE —— 于是 `PORT=47399 node scripts/smoke.js` 会被静默忽略，
+// 转头去打 47321 的真实实例。自测脚本打穿用户真实环境，比测不出来严重得多。
+// 现在两个都认，且默认端口取自 src/port.js 的单一常量，不在这里另写一个 47321。
 //
 // 与 tests/ 的分工：tests/ 起临时库、只测单点；这里打真实例、测"整条链路能不能通"，
 // 因为它验证的是真实部署形态（真端口、真静态文件、真 MCP 端点、真 DSH 工作区）。
 //
 // 每条断言都打印 ✔/✘ 与耗时；任何一条失败 → 汇总后以非 0 退出。
 import process from 'node:process';
+import { resolvePort } from '../src/port.js';
 
-const BASE = (process.env.BASE || 'http://127.0.0.1:47321').replace(/\/+$/, '');
+const BASE = (
+  process.env.BASE || `http://127.0.0.1:${resolvePort(process.env.PORT)}`
+).replace(/\/+$/, '');
 const AI_ID = process.env.SMOKE_ACTOR_ID || 'smoke-runner';
 const AI_MODEL = process.env.SMOKE_ACTOR_MODEL || 'deepseek-v4.1';
 
@@ -131,12 +140,12 @@ async function main() {
   // 2. 建工单（AI 身份）
   let ticket = null;
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const title = `[smoke] 端到端冒烟 ${stamp}`;
+  const content = `[smoke] 端到端冒烟 ${stamp}\n\n这是冒烟脚本创建并会自动删除的工单。\n第二行内容。`;
   await step('建工单 (POST /api/workspaces/:ws/tickets, AI 身份)', async () => {
     const r = await api(`/api/workspaces/${encodeURIComponent(wsSlug)}/tickets`, {
       method: 'POST',
       headers: asAi(),
-      body: { title, body: '这是冒烟脚本创建并会自动删除的工单。\n第二行正文。', priority: 2 },
+      body: { content, priority: 2 },
     });
     mustEq(r.status, 201, 'HTTP 状态码');
     ticket = r.json;
@@ -220,7 +229,7 @@ async function main() {
     must(r.contentType.startsWith('text/plain'), `Content-Type 应为 text/plain，实际 ${r.contentType}`);
     mustMatch(r.text, /^# ai-mcp-ticket {2}workspace: /m, '首行 workspace 头（契约 4.2）');
     mustMatch(r.text, new RegExp(`\\[\\d+\\] ${escRe(ticket.ref)} {2}处理中 {2}优先级:高 {2}更新:`), '条目首行格式');
-    must(r.text.includes('    title: [smoke] 端到端冒烟'), '列表里必须能找到刚建的工单');
+    must(r.text.includes('    content: [smoke] 端到端冒烟'), '列表里必须能找到刚建的工单（content 行）');
     must(r.text.includes('    comments(2):'), '评论块应显示 2 条');
     must(r.text.includes('冒烟：这是用户本人写的评论'), '用户的评论要出现在纯文本里');
     must(r.text.includes('冒烟：这是 AI 写的评论'), 'AI 的评论要出现在纯文本里');
@@ -239,7 +248,8 @@ async function main() {
     must(r.contentType.startsWith('text/plain'), `Content-Type 应为 text/plain，实际 ${r.contentType}`);
     mustMatch(r.text, new RegExp(`^# ai-mcp-ticket ticket: ${escRe(ticket.ref)}$`, 'm'), '首行（契约 4.3）');
     must(r.text.includes('status: 处理中 (in_progress)'), '状态行必须含中英文');
-    must(r.text.includes('## 正文'), '必须有正文段');
+    must(r.text.includes('## 内容'), '必须有内容段');
+    must(r.text.includes('第二行内容。'), '内容段必须包含建单时写的全部内容');
     must(r.text.includes('## 评论 (2)'), '必须有评论段且条数为 2');
     must(r.text.includes(`id: ${ticket.id}`), '必须给出 uuid，AI 写评论要用');
     return '格式符合 4.3';
@@ -355,7 +365,7 @@ async function main() {
     const r = await fetchText(`/${encodeURIComponent(wsSlug)}/list?status=in_progress`);
     mustEq(r.status, 200, 'HTTP 状态码');
     must(!r.text.includes(ticket.ref), `列表里还能看到 ${ticket.ref}，删除没生效`);
-    must(!r.text.includes(title), '列表里还能看到冒烟工单的标题');
+    must(!r.text.includes(stamp), '列表里还能看到冒烟工单的内容');
     // 单工单也应是 404
     const one = await fetchText(`/${encodeURIComponent(wsSlug)}/t/${ticket.seq}.txt`);
     mustEq(one.status, 404, '删后单工单纯文本应 404');

@@ -20,10 +20,14 @@ export function truncate(text, maxlen) {
   return [...s].slice(0, limit).join('') + '…(截断)';
 }
 
-/** 多行文本缩进：首行跟在前缀后面，后续行按同样宽度对齐，避免破坏段落结构 */
+/** 多行文本缩进：首行跟在前缀后面，后续行按同样宽度对齐，避免破坏段落结构。
+ *  空行不补缩进空格——纯空白行给 AI 读没有任何信息，只白烧 token。 */
 function indentBlock(text, prefix, contIndent) {
   const lines = String(text ?? '').split('\n');
-  return [prefix + lines[0], ...lines.slice(1).map((l) => contIndent + l)].join('\n');
+  return [
+    prefix + lines[0],
+    ...lines.slice(1).map((l) => (l.trim() ? contIndent + l : '')),
+  ].join('\n');
 }
 
 function commentsBlock(comments, { comments: commentLimit, indent = '    ' }) {
@@ -65,7 +69,7 @@ function listHint(slug, baseUrl) {
  * @param {object} p.workspace   {slug,title,path}
  * @param {Array}  p.tickets     repo 出来的工单（含 ref）
  * @param {string[]|null} p.statuses 生效的状态过滤
- * @param {number} [p.maxlen]    正文截断长度，0=不截断
+ * @param {number} [p.maxlen]    内容截断长度，0=不截断
  * @param {number} [p.comments]  只显示最后 N 条评论，0=隐藏
  * @param {string} [p.generatedAt]
  */
@@ -91,7 +95,6 @@ export function renderTicketList({
     lines.push(
       `[${i + 1}] ${t.ref}  ${STATUS_LABEL[t.status] ?? t.status}  优先级:${prio}  更新:${t.updated_at}`,
     );
-    lines.push(`    title: ${t.title}`);
     lines.push(
       `    by: ${actorLabel(t.actor_id, t.actor_role, t.model)} at ${t.created_at}`,
     );
@@ -100,8 +103,9 @@ export function renderTicketList({
     if (t.assignee_id) {
       lines.push(`    assignee: ${actorLabel(t.assignee_id, t.assignee_role, t.assignee_model)} since ${t.claimed_at}`);
     }
-    if (t.body && t.body.trim()) {
-      lines.push(indentBlock(truncate(t.body, maxlen), '    body: ', '      '));
+    // 工单只有 content 一个内容字段（契约 1.3）：不再有 title/body 两行，多行按 6 空格对齐
+    if (t.content && t.content.trim()) {
+      lines.push(indentBlock(truncate(t.content, maxlen), '    content: ', '      '));
     }
     if (t.comments && t.comments.length) {
       lines.push(...commentsBlock(t.comments, { comments }));
@@ -122,7 +126,7 @@ const DONE_WORDS = /已完成|搞定了|已修复|已解决|修好了|done|fixed
  * @param {object} p
  * @param {string} p.status    写入后的工单状态
  * @param {'comment_add'|'ticket_create'} [p.event] 本次写操作类型；读操作不传
- * @param {string} [p.body]    本次写入的正文（判断"完工报告"用）
+ * @param {string} [p.body]    本次写入的正文（评论正文，不是工单 content；判断"完工报告"用）
  * @param {'user'|'ai'} [p.actorRole]
  * @returns {string|null} 需要追加的提醒行（不含换行），无需提醒时返回 null
  */
@@ -168,9 +172,9 @@ export function renderTicket(ticket, { maxlen = 0, workspace, hint = null, baseU
   }
   lines.push(`id: ${ticket.id}`);
 
-  lines.push('', '## 正文');
-  const body = (ticket.body || '').trim();
-  lines.push(body ? truncate(body, maxlen) : '(空)');
+  lines.push('', '## 内容');
+  const content = (ticket.content || '').trim();
+  lines.push(content ? truncate(content, maxlen) : '(空)');
 
   const comments = ticket.comments || [];
   lines.push('', `## 评论 (${comments.length})`);

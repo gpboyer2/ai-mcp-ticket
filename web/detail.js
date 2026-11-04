@@ -188,9 +188,9 @@
           window.icon('trash-2', 13) + '<span>删除</span></button>' +
       '</div>' +
 
-      // ③ 内容区：完整内容（首行即正文第一行，不再被抽成「标题」截走）
+      // ③ 内容区：content 原文整段显示（只有 content 一个内容字段，没有标题可抽）
       (function () {
-        const full = T.joinMerged(t);
+        const full = String(t.content || '');
         return '' +
           '<div class="content-block">' +
             '<div class="body-text' + (full ? '' : ' empty') + '" id="d-text">' +
@@ -342,7 +342,7 @@
 
     document.getElementById('d-del').addEventListener('click', async function () {
       const ok = await T.confirmDialog('删除工单',
-        '确定删除「' + ticket.ref + ' ' + ticket.title + '」？评论会一并删除，无法恢复。', '删除');
+        '确定删除「' + ticket.ref + ' ' + T.cardPreview(ticket) + '」？评论会一并删除，无法恢复。', '删除');
       if (!ok) return;
       try {
         await T.API.deleteTicket(ticket.id);

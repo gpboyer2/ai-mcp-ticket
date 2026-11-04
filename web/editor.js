@@ -1,8 +1,6 @@
 /* ==========================================================================
    editor.js —— 新建 / 编辑工单弹窗（契约 6.3 / 工单 ai-剧本#14）
-   核心：标题与正文合并成一个大 textarea
-     · 提交：第一行（去掉行首 # - * 空白）当 title，其余行当 body
-     · 编辑：把 title + body 拼回同一个框
+   工单只有 content 一个内容字段：整个 textarea 就是 content 原文，不再拆标题与正文。
    依赖字段用 deps-picker.js 的可搜索多选下拉（契约 6.4）
    ========================================================================== */
 (function () {
@@ -13,19 +11,19 @@
     const v = t || {};
     const status = v.status || 'open';
     const priority = v.priority == null ? 1 : Number(v.priority);
-    const merged = t ? T.joinMerged(v) : '';
+    const content = t ? String(v.content || '') : '';
     return '<div class="field">' +
         '<label>工单内容</label>' +
-        '<textarea class="textarea merged" name="merged" ' +
-          'placeholder="第一行是标题，其余是正文；可以随便写，也可以直接粘贴图片。&#10;&#10;例如：&#10;修复回测空指针&#10;复现步骤 1) … 2) …&#10;验收标准：…">' +
-          T.esc(merged) + '</textarea>' +
+        '<textarea class="textarea merged" name="content" ' +
+          'placeholder="写工单内容，可以随便写，也可以直接粘贴图片。第一行会作为卡片预览。">' +
+          T.esc(content) + '</textarea>' +
         '<div class="img-hint" id="editor-hint" hidden></div>' +
         '<div class="editor-actions">' +
           '<button class="btn sm" id="editor-img" type="button" title="插入图片（也可直接粘贴或拖入）">' +
             window.icon('image-plus', 14) + '<span>插入图片</span></button>' +
           '<input type="file" id="editor-file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>' +
         '</div>' +
-        '<div class="hint">第一行作标题（自动去掉行首的 # 或 -），其余作正文。图片会以 Markdown 语法插入。</div>' +
+        '<div class="hint">内容支持 Markdown。图片会以 Markdown 语法插入。</div>' +
       '</div>' +
       '<div class="field-row">' +
         '<div class="field"><label>优先级</label><select class="select" name="priority">' +
@@ -58,7 +56,7 @@
 
   // 给弹窗里的合并输入框挂上图片能力（粘贴/拖入/点选）
   function mountImageUpload(modal) {
-    const ta = modal.querySelector('[name="merged"]');
+    const ta = modal.querySelector('[name="content"]');
     const hint = modal.querySelector('#editor-hint');
     const btn = modal.querySelector('#editor-img');
     const file = modal.querySelector('#editor-file');
@@ -86,12 +84,10 @@
   }
 
   function readForm(modal, picker) {
-    const merged = modal.querySelector('[name="merged"]').value;
-    const parsed = T.splitMerged(merged);
-    if (!parsed.title) throw new Error('请至少写一行标题');
+    const content = modal.querySelector('[name="content"]').value.trim();
+    if (!content) throw new Error('请至少写一行内容');
     return {
-      title: parsed.title,
-      body: parsed.body,
+      content: content,
       priority: Number(modal.querySelector('[name="priority"]').value),
       status: modal.querySelector('[name="status"]').value,
       blocked_by: picker ? picker.getValue() : ''

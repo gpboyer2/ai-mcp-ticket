@@ -14,7 +14,7 @@ const comment = (base, ticketId, headers = {}, body = 'x') =>
 test('role=ai 缺 id 或 model → 400 且 code=ACTOR_REQUIRED', async () => {
   const app = await startTestApp();
   try {
-    const t = await create(app.base, { title: '身份校验' });
+    const t = await create(app.base, { content: '身份校验' });
 
     // 缺 model
     const noModel = await comment(app.base, t.id, { 'X-Actor-Role': 'ai', 'X-Actor-Id': 'deepseek' });
@@ -44,7 +44,7 @@ test('role=ai 缺 id 或 model → 400 且 code=ACTOR_REQUIRED', async () => {
     // 建单路径同样要校验（不能只校验评论）
     const createNoModel = await req(app.base, `/api/workspaces/${WS}/tickets`, {
       method: 'POST',
-      body: { title: 'AI 建单' },
+      body: { content: 'AI 建单' },
       headers: { 'X-Actor-Role': 'ai', 'X-Actor-Id': 'deepseek' },
     });
     assert.equal(createNoModel.status, 400, '建工单也必须校验 actor');
@@ -63,7 +63,7 @@ test('role=ai 缺 id 或 model → 400 且 code=ACTOR_REQUIRED', async () => {
 test('role=user 时强制 id=user、model=null（忽略传入值）', async () => {
   const app = await startTestApp();
   try {
-    const t = await create(app.base, { title: '用户归一' });
+    const t = await create(app.base, { content: '用户归一' });
 
     // 头里带了假的 id/model，但 role=user → 必须被归一
     const viaHeader = await comment(app.base, t.id, {
@@ -105,7 +105,7 @@ test('role=user 时强制 id=user、model=null（忽略传入值）', async () =
 test('三个来源的优先级：头 > body.actor > query', async () => {
   const app = await startTestApp();
   try {
-    const t = await create(app.base, { title: '优先级' });
+    const t = await create(app.base, { content: '优先级' });
     const query = '?actor_id=q-actor&actor_role=ai&actor_model=q-model';
 
     // 三者都给：头赢
@@ -141,7 +141,7 @@ test('三个来源的优先级：头 > body.actor > query', async () => {
 test('非法 role 被拒，且不会静默降级成 user', async () => {
   const app = await startTestApp();
   try {
-    const t = await create(app.base, { title: '非法 role' });
+    const t = await create(app.base, { content: '非法 role' });
     for (const bad of ['robot', 'AI', 'Ai', 'admin', '1']) {
       const r = await comment(app.base, t.id, { 'X-Actor-Role': bad, 'X-Actor-Id': 'x', 'X-Actor-Model': 'm' });
       assert.equal(r.status, 400, `role=${bad} 必须 400，不能悄悄当 user 处理`);
@@ -155,7 +155,7 @@ test('非法 role 被拒，且不会静默降级成 user', async () => {
 test('首次出现的 actor 自动登记到 actors 表，并统计写入次数', async () => {
   const app = await startTestApp();
   try {
-    const t = await create(app.base, { title: '登记' });
+    const t = await create(app.base, { content: '登记' });
     await comment(app.base, t.id, AI_HEADERS);
     await comment(app.base, t.id, AI_HEADERS);
     await comment(app.base, t.id, {}); // user
@@ -205,7 +205,7 @@ test('首次出现的 actor 自动登记到 actors 表，并统计写入次数',
 test('同一个 AI 换模型后，历史评论保留当时的 model（契约 1.1）', async () => {
   const app = await startTestApp();
   try {
-    const t = await create(app.base, { title: '换模型' });
+    const t = await create(app.base, { content: '换模型' });
     const oldComment = await comment(app.base, t.id, {
       'X-Actor-Role': 'ai',
       'X-Actor-Id': 'deepseek',

@@ -29,7 +29,7 @@ test('中文 slug：未编码、URL 编码、.txt 后缀、?format=text 四种�
     const t = (
       await req(app.base, `/api/workspaces/${encodeURIComponent(CN_SLUG)}/tickets`, {
         method: 'POST',
-        body: { title: '中文 slug 下的工单' },
+        body: { content: '中文 slug 下的工单' },
       })
     ).body;
     assert.equal(t.ref, `${CN_SLUG}#1`, 'ref 里必须带中文 slug');
@@ -41,7 +41,7 @@ test('中文 slug：未编码、URL 编码、.txt 后缀、?format=text 四种�
     assert.equal(rawTxt.status, 200, '未编码中文 slug + .txt 必须 200');
     assert.match(rawTxt.contentType, /^text\/plain; charset=utf-8/, '必须是 text/plain');
     assert.ok(rawTxt.text.startsWith(`# ai-mcp-ticket  workspace: ${CN_SLUG}  path: ${CN_DIR}`), '首行必须回显中文 slug 与含空格的中文路径');
-    assert.ok(rawTxt.text.includes('    title: 中文 slug 下的工单'), '列表内容必须正确');
+    assert.ok(rawTxt.text.includes('    content: 中文 slug 下的工单'), '列表内容必须正确');
 
     // 2) 编码后 + .txt
     const encTxt = await reqText(app.base, `/${encoded}/list.txt`, { Accept: 'text/plain' });

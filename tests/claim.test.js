@@ -19,10 +19,10 @@ const OTHER_AI = Object.freeze({
   'X-Actor-Model': 'claude-sonnet-4.5',
 });
 
-async function createTicket(app, title = '认领测试工单') {
+async function createTicket(app, content = '认领测试工单') {
   const r = await req(app.base, `/api/workspaces/${WS}/tickets`, {
     method: 'POST',
-    body: { title },
+    body: { content },
   });
   return r.body;
 }
@@ -143,11 +143,11 @@ test('过期失效后，别的 AI 也能 PATCH（写操作保护不触发）', a
       .run(new Date(Date.now() - 100 * 24 * 60 * 60 * 1000).toISOString(), t.id);
     const p = await req(app.base, `/api/tickets/${t.id}`, {
       method: 'PATCH',
-      body: { title: '被接管后改的标题' },
+      body: { content: '被接管后改的内容' },
       headers: OTHER_AI,
     });
     assert.equal(p.status, 200, '过期认领下别的 AI 应能 PATCH');
-    assert.equal(p.body.title, '被接管后改的标题');
+    assert.equal(p.body.content, '被接管后改的内容');
   } finally {
     await app.close();
   }
@@ -160,11 +160,11 @@ test('user 可覆盖 AI 的认领：PATCH 被 AI 认领的工单 → 200', async
     await claim(app, t.id); // AI 认领
     const p = await req(app.base, `/api/tickets/${t.id}`, {
       method: 'PATCH',
-      body: { title: '用户强行改的' },
+      body: { content: '用户强行改的' },
       // 不带任何 actor 头 → role=user（老板）
     });
     assert.equal(p.status, 200, '用户应能覆盖 AI 的认领');
-    assert.equal(p.body.title, '用户强行改的');
+    assert.equal(p.body.content, '用户强行改的');
   } finally {
     await app.close();
   }
@@ -189,7 +189,7 @@ test('写操作保护：被 AI 认领且未过期时，别的 AI 的 PATCH/评�
     const t = await createTicket(app);
     await claim(app, t.id); // deepseek 认领，未过期
     const patch = await req(app.base, `/api/tickets/${t.id}`, {
-      method: 'PATCH', body: { title: '想改' }, headers: OTHER_AI,
+      method: 'PATCH', body: { content: '想改' }, headers: OTHER_AI,
     });
     assert.equal(patch.status, 409, '别的 AI PATCH 应 409');
     const comment = await req(app.base, `/api/tickets/${t.id}/comments`, {
@@ -227,7 +227,7 @@ test('写操作保护不误伤：认领者本人仍可 PATCH/评论', async () =
     const t = await createTicket(app);
     await claim(app, t.id); // deepseek 认领
     const patch = await req(app.base, `/api/tickets/${t.id}`, {
-      method: 'PATCH', body: { title: '认领者自己改' }, headers: AI_HEADERS,
+      method: 'PATCH', body: { content: '认领者自己改' }, headers: AI_HEADERS,
     });
     assert.equal(patch.status, 200);
     const comment = await req(app.base, `/api/tickets/${t.id}/comments`, {
@@ -239,7 +239,7 @@ test('写操作保护不误伤：认领者本人仍可 PATCH/评论', async () =
   }
 });
 
-test('数据库迁移：老 v1 库（无认领四列）增量加列、幂等、不丢数据', () => {
+test('数据库迁移：老 v1 库（title+body、无认领四列）一路升到 v3，内容不丢', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'claim-mig-'));
   const p = path.join(dir, 'old.db');
   // 造一个 v1 老库：tickets 只有原始 12 列，且已有真实工单，user_version=1
@@ -257,17 +257,18 @@ test('数据库迁移：老 v1 库（无认领四列）增量加列、幂等、�
   old.close();
 
   try {
-    // 连两次，验证迁移幂等（第二次不应重复 ALTER / 不报错）
+    // 连两次，验证迁移幂等（第二次不应重复 ALTER / 重建 / 不报错）
     let db = openDb(p);
-    assert.equal(db.pragma('user_version', { simple: true }), 2, '应升到 schema v2');
+    assert.equal(db.pragma('user_version', { simple: true }), 3, '应一路升到 schema v3');
     db.close();
     db = openDb(p);
     const cols = db.pragma('table_info(tickets)').map((c) => c.name);
-    for (const col of ['assignee_id', 'assignee_role', 'assignee_model', 'claimed_at']) {
+    for (const col of ['assignee_id', 'assignee_role', 'assignee_model', 'claimed_at', 'content']) {
       assert.ok(cols.includes(col), `缺列 ${col}`);
     }
-    const row = db.prepare('SELECT title, assignee_id FROM tickets WHERE id = ?').get('t1');
-    assert.equal(row.title, '老数据保命', '老数据应保留');
+    assert.ok(!cols.includes('title') && !cols.includes('body'), 'title / body 两列必须彻底移除（契约 1.3）');
+    const row = db.prepare('SELECT content, assignee_id FROM tickets WHERE id = ?').get('t1');
+    assert.equal(row.content, '老数据保命', '老数据应保留（body 为空时 content 就是 title）');
     assert.equal(row.assignee_id, null, '新列默认 NULL');
     db.close();
   } finally {

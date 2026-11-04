@@ -50,6 +50,18 @@ test('initialize → tools/list 恰好 10 个工具，名字与契约第 5 节�
         `${name} 的描述里应写明"填你自己的身份和模型"（契约 5 末段）`,
       );
     }
+    // 建单工具的 schema 只认 content（契约 1.3：title / body 两个概念已废除）
+    const createTool = list.json.result.tools.find((t) => t.name === 'ticket_create');
+    const createProps = Object.keys(createTool.inputSchema.properties || {});
+    assert.ok(createProps.includes('content'), 'ticket_create 必须有 content 入参');
+    assert.ok(createTool.inputSchema.required.includes('content'), 'ticket_create 的 content 必填');
+    assert.ok(!createProps.includes('title'), 'ticket_create 不能再有 title 入参');
+    assert.ok(!createProps.includes('body'), 'ticket_create 不能再有 body 入参');
+    const updateTool = list.json.result.tools.find((t) => t.name === 'ticket_update');
+    const updateProps = Object.keys(updateTool.inputSchema.properties || {});
+    assert.ok(updateProps.includes('content'), 'ticket_update 必须有 content 入参');
+    assert.ok(!updateProps.includes('title') && !updateProps.includes('body'), 'ticket_update 不能再有 title/body 入参');
+
     // 读工具不应要求 actor
     const readTools = ['workspace_list', 'ticket_list', 'ticket_get', 'comment_list'];
     for (const name of readTools) {
@@ -70,7 +82,7 @@ test('ticket_list / ticket_get / comment_add 返回 content[0].type=text 且是�
     const t = (
       await req(app.base, `/api/workspaces/${WS}/tickets`, {
         method: 'POST',
-        body: { title: 'MCP 测试工单', body: '正文', priority: 2 },
+        body: { content: 'MCP 测试工单\n\n正文', priority: 2 },
       })
     ).body;
 
@@ -82,7 +94,7 @@ test('ticket_list / ticket_get / comment_add 返回 content[0].type=text 且是�
     assert.ok(!listText.trim().startsWith('{'), '绝不能返回 JSON —— 那等于把 token 浪费在括号引号上');
     assert.ok(!listText.trim().startsWith('['), '不能返回 JSON 数组');
     assert.ok(listText.startsWith(`# ai-mcp-ticket  workspace: ${WS}`), '必须是 4.2 格式的纯文本列表');
-    assert.ok(listText.includes('    title: MCP 测试工单'), '要包含真实工单内容');
+    assert.ok(listText.includes('    content: MCP 测试工单'), '要包含真实工单内容（第一行就是卡片预览）');
     assert.ok(listText.trimEnd().endsWith('# end. 用 ?status= 过滤，?format=text 强制纯文本'), '必须带结尾行');
 
     // ticket_get
@@ -122,12 +134,12 @@ test('写工具缺 actor_id / actor_model 返回 isError（而不是静默写成
   try {
     await mcpInit(app.base);
     const t = (
-      await req(app.base, `/api/workspaces/${WS}/tickets`, { method: 'POST', body: { title: '身份缺失' } })
+      await req(app.base, `/api/workspaces/${WS}/tickets`, { method: 'POST', body: { content: '身份缺失' } })
     ).body;
 
     const cases = [
-      ['ticket_create', { workspace: WS, title: 'x' }],
-      ['ticket_update', { ref: t.ref, title: 'y' }],
+      ['ticket_create', { workspace: WS, content: 'x' }],
+      ['ticket_update', { ref: t.ref, content: 'y' }],
       ['ticket_delete', { ref: t.ref }],
       ['comment_add', { ref: t.ref, body: 'z' }],
       ['comment_update', { comment_id: 'any', body: 'z' }],
@@ -151,7 +163,7 @@ test('写工具缺 actor_id / actor_model 返回 isError（而不是静默写成
     // 空串也不能混过去
     const empty = await mcpCall(app.base, 'ticket_create', {
       workspace: WS,
-      title: 'x',
+      content: 'x',
       actor_id: '',
       actor_model: '',
     });
@@ -176,8 +188,7 @@ test('MCP 全套写操作：create → update → comment_add → comment_update
     // create
     const created = await mcpCall(app.base, 'ticket_create', {
       workspace: WS,
-      title: 'MCP 建的单',
-      body: '正文',
+      content: 'MCP 建的单\n\n正文',
       priority: 3,
       ...AI,
     });
@@ -236,14 +247,14 @@ test('MCP 读工具：workspace_list 与 ticket_list 的过滤/截断参数', as
     assert.ok(ws.content[0].text.startsWith('# ai-mcp-ticket 工作区索引'));
     assert.ok(ws.content[0].text.includes(WS), '要列出工作区');
 
-    // 造两张工单，一张长正文
+    // 造两张工单，一张内容很长
     await req(app.base, `/api/workspaces/${WS}/tickets`, {
       method: 'POST',
-      body: { title: '短正文', body: '短' },
+      body: { content: '短正文\n\n短' },
     });
     await req(app.base, `/api/workspaces/${WS}/tickets`, {
       method: 'POST',
-      body: { title: '长正文', body: '很长'.repeat(500), status: 'done' },
+      body: { content: '长正文\n\n' + '很长'.repeat(500), status: 'done' },
     });
 
     // status 过滤

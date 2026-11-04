@@ -14,7 +14,7 @@ const addComment = (base, ticketId, body, headers = {}) =>
 test('评论增删改：正文、身份、model 都正确落库', async () => {
   const app = await startTestApp();
   try {
-    const t = await create(app.base, { title: '有评论的工单' });
+    const t = await create(app.base, { content: '有评论的工单' });
 
     // 用户评论
     const c1 = await addComment(app.base, t.id, '用户说的话');
@@ -63,7 +63,7 @@ test('评论增删改：正文、身份、model 都正确落库', async () => {
 test('评论写入后工单 updated_at 必须变化（AI 判断新动静的唯一依据）', async () => {
   const app = await startTestApp();
   try {
-    const t = await create(app.base, { title: '监听 updated_at' });
+    const t = await create(app.base, { content: '监听 updated_at' });
 
     // 新增评论
     await addComment(app.base, t.id, '新评论');
@@ -97,7 +97,7 @@ test('评论写入后工单 updated_at 必须变化（AI 判断新动静的唯�
 test('连续快速写评论时 updated_at 每次都要前进（不能因同毫秒时间戳相同而看起来没动静）', async () => {
   const app = await startTestApp();
   try {
-    const t = await create(app.base, { title: '快速连写' });
+    const t = await create(app.base, { content: '快速连写' });
     const seen = [];
     // 连着写 5 条：网络往返已够快，同一毫秒内多次写入完全可能发生
     for (let i = 0; i < 5; i++) {
@@ -118,7 +118,7 @@ test('连续快速写评论时 updated_at 每次都要前进（不能因同毫�
 test('评论校验：空 body / 纯空白 / 超长 10000 / 不存在工单', async () => {
   const app = await startTestApp();
   try {
-    const t = await create(app.base, { title: '校验用' });
+    const t = await create(app.base, { content: '校验用' });
 
     const empty = await addComment(app.base, t.id, '');
     assert.equal(empty.status, 400, '空 body 评论必须 400');
@@ -149,7 +149,7 @@ test('评论校验：空 body / 纯空白 / 超长 10000 / 不存在工单', asy
 test('评论按 created_at 升序，同毫秒按 rowid 保序', async () => {
   const app = await startTestApp();
   try {
-    const t = await create(app.base, { title: '排序' });
+    const t = await create(app.base, { content: '排序' });
     const bodies = ['一', '二', '三', '四', '五'];
     for (const b of bodies) await addComment(app.base, t.id, b);
     const list = (await req(app.base, `/api/tickets/${t.id}/comments`)).body;

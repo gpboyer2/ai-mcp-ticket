@@ -27,8 +27,7 @@ function rowToTicket(r, slug) {
     workspace_id: r.workspace_id,
     workspace_slug: slug,
     seq: r.seq,
-    title: r.title,
-    body: r.body ?? '',
+    content: r.content ?? '',
     status: r.status,
     priority: r.priority,
     position: r.position,
@@ -52,11 +51,22 @@ const SORTS = {
   priority: 't.priority',
 };
 
-function assertTitle(title) {
-  const t = typeof title === 'string' ? title.trim() : '';
-  if (!t) throw new HttpError(400, 'TITLE_REQUIRED', 'title 必填');
-  if ([...t].length > 200) throw new HttpError(400, 'TITLE_TOO_LONG', 'title 最多 200 字');
-  return t;
+// 契约 1.3：content 上限 100000 字。存在意义是防止 AI 或误操作把整份文件贴进来把库撑爆。
+// 按字符数（不是 UTF-16 码元）算，中文不会被当成 2 个。
+export const CONTENT_MAX = 100000;
+
+/**
+ * content 校验（契约 1.3）：trim 后为空即未填，超长直接 400。
+ * 返回值是用户原文，不是 trim 后的 —— 首尾空白是 Markdown 缩进的一部分，吃掉就改坏排版。
+ */
+function assertContent(content) {
+  const s = typeof content === 'string' ? content : String(content ?? '');
+  if (!s.trim()) throw new HttpError(400, 'CONTENT_REQUIRED', '内容必填');
+  const n = [...s].length;
+  if (n > CONTENT_MAX) {
+    throw new HttpError(400, 'CONTENT_TOO_LONG', `content 最多 ${CONTENT_MAX} 字，收到 ${n} 字`);
+  }
+  return s;
 }
 
 function assertPriority(p) {
@@ -88,19 +98,6 @@ function assertPosition(p) {
     throw new HttpError(400, 'POSITION_INVALID', `position 必须是数字，收到 "${p}"`);
   }
   return n;
-}
-
-// 契约 1.3：正文上限 100000 字。存在意义是防止 AI 或误操作把整份文件贴进来把库撑爆。
-// 按字符数（不是 UTF-16 码元）算，中文不会被当成 2 个。
-export const BODY_MAX = 100000;
-
-function assertBody(body) {
-  const b = typeof body === 'string' ? body : String(body ?? '');
-  const n = [...b].length;
-  if (n > BODY_MAX) {
-    throw new HttpError(400, 'BODY_TOO_LONG', `body 最多 ${BODY_MAX} 字，收到 ${n} 字`);
-  }
-  return b;
 }
 
 // 契约 5.5.1：合法状态迁移表。reopened 的存在就是为了把 done/cancelled 救回来，
@@ -196,9 +193,8 @@ export function createTicketRepo(db, workspaceRepo) {
     }
     const keyword = typeof q === 'string' ? q.trim() : '';
     if (keyword) {
-      where.push('(t.title LIKE ? ESCAPE \'\\\' OR t.body LIKE ? ESCAPE \'\\\')');
-      const like = `%${keyword.replace(/[\\%_]/g, (c) => '\\' + c)}%`;
-      params.push(like, like);
+      where.push("t.content LIKE ? ESCAPE '\\'");
+      params.push(`%${keyword.replace(/[\\%_]/g, (c) => '\\' + c)}%`);
     }
 
     const col = SORTS[sort];
@@ -272,13 +268,12 @@ export function createTicketRepo(db, workspaceRepo) {
     return refs.join(',');
   }
 
-  function create(workspaceRow, { title, body, status, priority, blocked_by, position }, actor) {
-    const t = assertTitle(title);
+  function create(workspaceRow, { content, status, priority, blocked_by, position }, actor) {
+    const text = assertContent(content);
     const st = assertStatus(status) || 'open';
     const pr = assertPriority(priority);
     // 先校验再进事务：非法入参不该消耗 seq（虽然事务会回滚，但提前拦更清楚）
     const wanted = assertPosition(position);
-    const bodyText = assertBody(body);
     const blocked = assertBlockedBy(blocked_by);
     const now = nowIso();
     const id = newId();
@@ -287,11 +282,11 @@ export function createTicketRepo(db, workspaceRepo) {
       const seq = nextSeq(workspaceRow.id);
       const pos = wanted !== null ? wanted : tailPosition(workspaceRow.id, st);
       db.prepare(
-        `INSERT INTO tickets (id, workspace_id, seq, title, body, status, priority, position, blocked_by,
+        `INSERT INTO tickets (id, workspace_id, seq, content, status, priority, position, blocked_by,
                               actor_id, actor_role, model, created_at, updated_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       ).run(
-        id, workspaceRow.id, seq, t, bodyText, st, pr ?? 1, pos,
+        id, workspaceRow.id, seq, text, st, pr ?? 1, pos,
         blocked, actor.id, actor.role, actor.model ?? null, now, now,
       );
       return seq;
@@ -308,13 +303,9 @@ export function createTicketRepo(db, workspaceRepo) {
     const sets = [];
     const params = [];
 
-    if (patch.title !== undefined) {
-      sets.push('title = ?');
-      params.push(assertTitle(patch.title));
-    }
-    if (patch.body !== undefined) {
-      sets.push('body = ?');
-      params.push(assertBody(patch.body));
+    if (patch.content !== undefined) {
+      sets.push('content = ?');
+      params.push(assertContent(patch.content));
     }
     if (patch.priority !== undefined) {
       const pr = assertPriority(patch.priority);

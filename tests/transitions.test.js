@@ -9,7 +9,7 @@ import { statusHint } from '../src/render/text.js';
 const WS = 'demo-project';
 
 async function create(base, body = {}) {
-  return req(base, `/api/workspaces/${WS}/tickets`, { method: 'POST', body: { title: 'T', ...body } });
+  return req(base, `/api/workspaces/${WS}/tickets`, { method: 'POST', body: { content: 'T', ...body } });
 }
 const patch = async (base, id, body) => req(base, `/api/tickets/${id}`, { method: 'PATCH', body });
 
@@ -31,7 +31,7 @@ test('迁移表：契约 5.5.1 的每一条合法迁移都放行', async () => {
     ];
     for (const [from, to] of paths) {
       // 每条路径都用一张新工单，避免相互影响
-      const t = (await create(app.base, { title: `${from}->${to}` })).body;
+      const t = (await create(app.base, { content: `${from}->${to}` })).body;
       if (from !== 'open') {
         // 先把工单推到起点：open → in_progress → 目标起点
         await patch(app.base, t.id, { status: 'in_progress' });
@@ -49,7 +49,7 @@ test('迁移表：契约 5.5.1 的每一条合法迁移都放行', async () => {
 test('迁移表：非法迁移返回 400 TRANSITION_INVALID 且文案带可选值', async () => {
   const app = await startTestApp();
   try {
-    const t = (await create(app.base, { title: 'open 不能直达 done' })).body;
+    const t = (await create(app.base, { content: 'open 不能直达 done' })).body;
     const r = await patch(app.base, t.id, { status: 'done' });
     assert.equal(r.status, 400);
     assert.equal(r.body.error.code, 'TRANSITION_INVALID');
@@ -73,7 +73,7 @@ test('迁移表：非法迁移返回 400 TRANSITION_INVALID 且文案带可选�
 test('迁移表：同状态幂等必须放行（前端拖回原位不能报错）', async () => {
   const app = await startTestApp();
   try {
-    const t = (await create(app.base, { title: '幂等' })).body;
+    const t = (await create(app.base, { content: '幂等' })).body;
     const r = await patch(app.base, t.id, { status: 'open' });
     assert.equal(r.status, 200, '同状态迁移必须放行');
     assert.equal(r.body.status, 'open');
@@ -85,7 +85,7 @@ test('迁移表：同状态幂等必须放行（前端拖回原位不能报错�
 test('迁移表：救援路径 done → reopened → in_progress 必须通', async () => {
   const app = await startTestApp();
   try {
-    const t = (await create(app.base, { title: '救援路径' })).body;
+    const t = (await create(app.base, { content: '救援路径' })).body;
     await patch(app.base, t.id, { status: 'in_progress' });
     await patch(app.base, t.id, { status: 'done' });
     const reopened = await patch(app.base, t.id, { status: 'reopened' });
@@ -101,7 +101,7 @@ test('迁移表：救援路径 done → reopened → in_progress 必须通', asy
 test('迁移表：删除不受状态限制', async () => {
   const app = await startTestApp();
   try {
-    const t = (await create(app.base, { title: 'done 也能删' })).body;
+    const t = (await create(app.base, { content: 'done 也能删' })).body;
     await patch(app.base, t.id, { status: 'in_progress' });
     await patch(app.base, t.id, { status: 'done' });
     const del = await req(app.base, `/api/tickets/${t.id}`, { method: 'DELETE' });
@@ -115,7 +115,7 @@ test('迁移表：删除不受状态限制', async () => {
 test('状态提醒：AI 给 open 工单加评论，末尾追加提醒行', async () => {
   const app = await startTestApp();
   try {
-    const t = (await create(app.base, { title: '提醒测试' })).body;
+    const t = (await create(app.base, { content: '提醒测试' })).body;
     const c = await req(app.base, `/api/tickets/${t.id}/comments`, {
       method: 'POST',
       headers: AI_HEADERS,
@@ -157,7 +157,7 @@ test('statusHint：三条触发规则与不触发的情况', () => {
 test('状态提醒：读接口不追加提醒行', async () => {
   const app = await startTestApp();
   try {
-    const t = (await create(app.base, { title: '读操作无提醒' })).body;
+    const t = (await create(app.base, { content: '读操作无提醒' })).body;
     await req(app.base, `/api/tickets/${t.id}/comments`, {
       method: 'POST',
       headers: AI_HEADERS,
@@ -176,7 +176,7 @@ test('状态提醒：读接口不追加提醒行', async () => {
 test('状态提醒：MCP comment_add 返回文本末尾带提醒', async () => {
   const app = await startTestApp();
   try {
-    const t = (await create(app.base, { title: 'MCP 提醒' })).body;
+    const t = (await create(app.base, { content: 'MCP 提醒' })).body;
     const mcp = async (payload) => {
       const res = await fetch(app.base + '/mcp', {
         method: 'POST',
@@ -206,23 +206,23 @@ test('状态提醒：MCP comment_add 返回文本末尾带提醒', async () => {
   }
 });
 
-test('M1：工单 body 上限 100000 字，超了 400 BODY_TOO_LONG', async () => {
+test('M1：工单 content 上限 100000 字，超了 400 CONTENT_TOO_LONG', async () => {
   const app = await startTestApp();
   try {
-    const okBody = '字'.repeat(100000);
-    const ok = await create(app.base, { title: '刚好到上限', body: okBody });
+    const okContent = '字'.repeat(100000);
+    const ok = await create(app.base, { content: okContent });
     assert.equal(ok.status, 201, '100000 字应放行');
 
     const tooLong = '字'.repeat(100001);
-    const bad = await create(app.base, { title: '超一个字', body: tooLong });
+    const bad = await create(app.base, { content: tooLong });
     assert.equal(bad.status, 400);
-    assert.equal(bad.body.error.code, 'BODY_TOO_LONG');
+    assert.equal(bad.body.error.code, 'CONTENT_TOO_LONG');
 
     // PATCH 路径同样受限
-    const t = (await create(app.base, { title: 'PATCH 超限' })).body;
-    const p = await patch(app.base, t.id, { body: tooLong });
+    const t = (await create(app.base, { content: 'PATCH 超限' })).body;
+    const p = await patch(app.base, t.id, { content: tooLong });
     assert.equal(p.status, 400);
-    assert.equal(p.body.error.code, 'BODY_TOO_LONG');
+    assert.equal(p.body.error.code, 'CONTENT_TOO_LONG');
   } finally {
     await app.close();
   }
@@ -231,26 +231,26 @@ test('M1：工单 body 上限 100000 字，超了 400 BODY_TOO_LONG', async () =
 test('M2：blocked_by 必须是真实存在的 ref，create 与 update 都校验', async () => {
   const app = await startTestApp();
   try {
-    const dep = (await create(app.base, { title: '依赖目标' })).body;
+    const dep = (await create(app.base, { content: '依赖目标' })).body;
 
     // create：合法 ref 放行
-    const good = await create(app.base, { title: '有依赖', blocked_by: dep.ref });
+    const good = await create(app.base, { content: '有依赖', blocked_by: dep.ref });
     assert.equal(good.status, 201);
     assert.equal(good.body.blocked_by, dep.ref);
 
     // create：格式非法
-    const badFormat = await create(app.base, { title: 'x', blocked_by: '乱写' });
+    const badFormat = await create(app.base, { content: 'x', blocked_by: '乱写' });
     assert.equal(badFormat.status, 400);
     assert.equal(badFormat.body.error.code, 'BLOCKED_BY_INVALID');
 
     // create：格式对但工单不存在
-    const missing = await create(app.base, { title: 'x', blocked_by: `${WS}#9999` });
+    const missing = await create(app.base, { content: 'x', blocked_by: `${WS}#9999` });
     assert.equal(missing.status, 400);
     assert.equal(missing.body.error.code, 'BLOCKED_BY_INVALID');
     assert.match(missing.body.error.message, /9999/, '文案要指出哪个 ref 不合法');
 
     // 多个 ref 里有一个坏的就整体拒绝，且文案点名坏的
-    const mixed = await create(app.base, { title: 'x', blocked_by: `${dep.ref},nope#1` });
+    const mixed = await create(app.base, { content: 'x', blocked_by: `${dep.ref},nope#1` });
     assert.equal(mixed.status, 400);
     assert.match(mixed.body.error.message, /nope#1/);
 

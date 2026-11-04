@@ -25,7 +25,7 @@ test('不存在的工作区 → 404 WORKSPACE_NOT_FOUND', async () => {
     assert.equal((await req(app.base, '/api/workspaces/no-such/tickets')).body.error.code, 'WORKSPACE_NOT_FOUND');
 
     assertErrorShape(
-      await req(app.base, '/api/workspaces/no-such/tickets', { method: 'POST', body: { title: 'x' } }),
+      await req(app.base, '/api/workspaces/no-such/tickets', { method: 'POST', body: { content: 'x' } }),
       404,
       '建工单',
     );
@@ -46,7 +46,7 @@ test('不存在的工单 → 404 TICKET_NOT_FOUND（GET/PATCH/DELETE/评论四�
     const fake = '00000000-0000-4000-8000-000000000000';
     for (const [method, path, body] of [
       ['GET', `/api/tickets/${fake}`],
-      ['PATCH', `/api/tickets/${fake}`, { title: 'x' }],
+      ['PATCH', `/api/tickets/${fake}`, { content: 'x' }],
       ['DELETE', `/api/tickets/${fake}`],
       ['GET', `/api/tickets/${fake}/comments`],
       ['POST', `/api/tickets/${fake}/comments`, { body: 'x' }],
@@ -64,35 +64,44 @@ test('不存在的工单 → 404 TICKET_NOT_FOUND（GET/PATCH/DELETE/评论四�
   }
 });
 
-test('超长 title（>200）→ 400；恰好 200 与中文 200 必须通过', async () => {
+test('content 校验：空 → CONTENT_REQUIRED，超 100000 字 → CONTENT_TOO_LONG，中文按字符算', async () => {
   const app = await startTestApp();
   try {
-    const long201 = await create(app.base, { title: 'x'.repeat(201) });
-    assertErrorShape(long201, 400, '201 个 ASCII 字符');
-    assert.equal(long201.body.error.code, 'TITLE_TOO_LONG', '超长标题的错误码应明确');
-
-    // 中文按字符数（不是字节）算：200 个汉字必须通过
-    const cn200 = await create(app.base, { title: '中'.repeat(200) });
-    assert.equal(cn200.status, 201, '200 个汉字必须被接受（按字符计数，不是字节）');
-    const cn201 = await create(app.base, { title: '中'.repeat(201) });
-    assert.equal(cn201.status, 400, '201 个汉字必须被拒');
-
-    // 空标题 / 纯空白
-    const empty = await create(app.base, { title: '' });
-    assertErrorShape(empty, 400, '空标题');
-    const blank = await create(app.base, { title: '    ' });
-    assertErrorShape(blank, 400, '纯空白标题');
+    // 空 / 纯空白 / 字段缺失，三种都算"没写内容"
+    const empty = await create(app.base, { content: '' });
+    assertErrorShape(empty, 400, '空内容');
+    assert.equal(empty.body.error.code, 'CONTENT_REQUIRED', '空内容的错误码必须是 CONTENT_REQUIRED（契约 1.3）');
+    const blank = await create(app.base, { content: '    ' });
+    assertErrorShape(blank, 400, '纯空白内容');
+    assert.equal(blank.body.error.code, 'CONTENT_REQUIRED');
     const missing = await create(app.base, {});
-    assertErrorShape(missing, 400, '缺 title');
+    assertErrorShape(missing, 400, '缺 content');
+    assert.equal(missing.body.error.code, 'CONTENT_REQUIRED');
 
-    // 前后空白应被 trim 后存储（否则 ref 展示难看）
-    const padded = await create(app.base, { title: '  有空白  ' });
-    assert.equal(padded.body.title, '有空白', 'title 应被 trim');
+    // 首尾空白必须原样保留：content 是整份 Markdown，缩进被 trim 掉就改坏排版
+    const padded = await create(app.base, { content: '  缩进开头\n结尾缩进  ' });
+    assert.equal(padded.body.content, '  缩进开头\n结尾缩进  ', 'content 必须原样保存，不能 trim');
+
+    // 上限 100000 字（契约 1.3），中文按字符数不是字节
+    const cnMax = await create(app.base, { content: '中'.repeat(100000) });
+    assert.equal(cnMax.status, 201, '100000 个汉字必须被接受（按字符计数，不是字节）');
+    const over = await create(app.base, { content: '中'.repeat(100001) });
+    assertErrorShape(over, 400, '100001 个汉字');
+    assert.equal(over.body.error.code, 'CONTENT_TOO_LONG', '超长内容的错误码必须是 CONTENT_TOO_LONG');
 
     // PATCH 也要校验长度
-    const t = (await create(app.base, { title: '正常' })).body;
-    const patchLong = await req(app.base, `/api/tickets/${t.id}`, { method: 'PATCH', body: { title: 'x'.repeat(201) } });
-    assertErrorShape(patchLong, 400, 'PATCH 超长标题');
+    const t = (await create(app.base, { content: '正常' })).body;
+    const patchLong = await req(app.base, `/api/tickets/${t.id}`, {
+      method: 'PATCH',
+      body: { content: 'x'.repeat(100001) },
+    });
+    assertErrorShape(patchLong, 400, 'PATCH 超长内容');
+    assert.equal(patchLong.body.error.code, 'CONTENT_TOO_LONG');
+
+    // PATCH 空内容也要拒（否则工单会变成空白卡片）
+    const patchEmpty = await req(app.base, `/api/tickets/${t.id}`, { method: 'PATCH', body: { content: '   ' } });
+    assertErrorShape(patchEmpty, 400, 'PATCH 空内容');
+    assert.equal(patchEmpty.body.error.code, 'CONTENT_REQUIRED');
   } finally {
     await app.close();
   }
@@ -101,7 +110,7 @@ test('超长 title（>200）→ 400；恰好 200 与中文 200 必须通过', as
 test('空 body 评论 → 400 BODY_REQUIRED', async () => {
   const app = await startTestApp();
   try {
-    const t = (await create(app.base, { title: '评论校验' })).body;
+    const t = (await create(app.base, { content: '评论校验' })).body;
     for (const body of [{ body: '' }, { body: '   ' }, {}, { body: null }]) {
       const r = await req(app.base, `/api/tickets/${t.id}/comments`, { method: 'POST', body });
       assertErrorShape(r, 400, `POST 评论 body=${JSON.stringify(body)}`);
@@ -115,19 +124,19 @@ test('空 body 评论 → 400 BODY_REQUIRED', async () => {
 test('非法 status / priority 越界 → 400 且 code 明确', async () => {
   const app = await startTestApp();
   try {
-    const bad = await create(app.base, { title: 'x', status: 'closed' });
+    const bad = await create(app.base, { content: 'x', status: 'closed' });
     assertErrorShape(bad, 400, '非法 status');
     assert.equal(bad.body.error.code, 'STATUS_INVALID');
 
     for (const p of [4, -1, 99, 'abc', 1.5]) {
-      const r = await create(app.base, { title: 'x', priority: p });
+      const r = await create(app.base, { content: 'x', priority: p });
       assertErrorShape(r, 400, `priority=${p}`);
       assert.equal(r.body.error.code, 'PRIORITY_INVALID', `priority=${p} 的错误码`);
     }
 
     // 边界值必须通过
     for (const p of [0, 1, 2, 3]) {
-      const r = await create(app.base, { title: `p${p}`, priority: p });
+      const r = await create(app.base, { content: `p${p}`, priority: p });
       assert.equal(r.status, 201, `priority=${p} 是合法值，必须通过`);
       assert.equal(r.body.priority, p);
     }
@@ -181,13 +190,14 @@ test('未知路径 → 404 统一错误体（/api 与页面各一套）', async 
 test('SQL 注入面：q 参数与所有字段都不拼接 SQL', async () => {
   const app = await startTestApp();
   try {
-    const t = (await create(app.base, { title: "1'; DROP TABLE tickets;--", body: '100% 的 _ 下划线 \\ 反斜杠' })).body;
-    // 标题里的恶意字符必须被原样存下来（证明走了参数化，而不是被"清洗"或执行）
-    assert.equal(t.title, "1'; DROP TABLE tickets;--", 'title 必须原样保存，不得被 SQL 拼接');
+    const evil = "1'; DROP TABLE tickets;--\n\n100% 的 _ 下划线 \\ 反斜杠";
+    const t = (await create(app.base, { content: evil })).body;
+    // 内容里的恶意字符必须被原样存下来（证明走了参数化，而不是被"清洗"或执行）
+    assert.equal(t.content, evil, 'content 必须原样保存，不得被 SQL 拼接');
 
     // LIKE 通配符必须被转义：搜 % 不应命中所有工单
     const pct = (await req(app.base, `/api/workspaces/${WS}/tickets?q=${encodeURIComponent('%')}`)).body;
-    assert.equal(pct.tickets.length, 1, 'q=% 必须被当作字面量，只命中正文里真有 % 的那张');
+    assert.equal(pct.tickets.length, 1, 'q=% 必须被当作字面量，只命中内容里真有 % 的那张');
     const underscore = (await req(app.base, `/api/workspaces/${WS}/tickets?q=${encodeURIComponent('_')}`)).body;
     assert.equal(underscore.tickets.length, 1, 'q=_ 必须被当作字面量');
     const backslash = (await req(app.base, `/api/workspaces/${WS}/tickets?q=${encodeURIComponent('\\')}`)).body;

@@ -1,7 +1,7 @@
-// 前端纯函数单测（契约 6.3 / 6.4 的标题正文合并、AI 视角 URL 生成）。
+// 前端纯函数单测（契约 1.3 的卡片预览、AI 视角 URL 生成）。
 // 为什么能在 node 里测：web/common.js 是个 IIFE，只依赖 window/document/localStorage，
 // 用最小 stub 顶掉这几个全局就能加载，然后把挂到 window.TT 上的纯函数拿出来直接断言。
-// 这比"看代码觉得没问题"可靠得多 —— 这些函数一错，用户写的正文就会悄悄丢字。
+// 这比"看代码觉得没问题"可靠得多 —— 这些函数一错，卡片上显示的内容就会错位或丢字。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -85,81 +85,41 @@ function loadCommon() {
 
 const TT = loadCommon();
 
-test('splitMerged（契约 6.3）：第一行作标题并去掉行首 # - *，其余作正文', () => {
-  // 普通两行（注意：TT 来自 vm 沙箱，对象原型与当前 realm 不同，
-  // 所以用逐字段断言而不是 deepEqual，避免"结构相同但引用不等"的假失败）
-  const two = TT.splitMerged('修复回测空指针\n复现步骤 1) … 2) …');
-  assert.equal(two.title, '修复回测空指针');
-  assert.equal(two.body, '复现步骤 1) … 2) …');
-  // 行首 Markdown 标记要被剥掉（用户会顺手写 # 或 -）
-  assert.equal(TT.splitMerged('# 加个深色模式\n正文').title, '加个深色模式');
-  assert.equal(TT.splitMerged('- 加个深色模式\n正文').title, '加个深色模式');
-  assert.equal(TT.splitMerged('* 加个深色模式\n正文').title, '加个深色模式');
-  assert.equal(TT.splitMerged('## 二级标题\n正文').title, '二级标题');
-  // 全角空格也要剥
-  assert.equal(TT.splitMerged('\u3000\u3000缩进标题\n正文').title, '缩进标题');
-
-  // 前面有空行：跳过空行找第一个非空行当标题
-  const leading = TT.splitMerged('\n\n\n真正的标题\n正文第一行');
-  assert.equal(leading.title, '真正的标题', '应跳过前导空行');
-  assert.equal(leading.body, '正文第一行');
-
-  // 只有一行：body 为空串（不是 undefined，后端要 String(body)）
-  const onlyTitle = TT.splitMerged('只有标题');
-  assert.equal(onlyTitle.title, '只有标题');
-  assert.equal(onlyTitle.body, '', '只有标题时 body 必须是空串而不是 undefined');
-
-  // 全空：title 为空，调用方据此报"请至少写一行标题"
-  for (const input of ['', '   \n\n  \t ', null, undefined]) {
-    const r = TT.splitMerged(input);
-    assert.equal(r.title, '', `输入 ${JSON.stringify(input)} 时 title 应为空`);
-    assert.equal(r.body, '', `输入 ${JSON.stringify(input)} 时 body 应为空`);
+test('cardPreview（契约 1.3）：取 content 第一个非空行当预览，剥掉行首 Markdown 记号', () => {
+  // 工单只有 content 一个内容字段，卡片上那行字只是它的预览，不是独立字段。
+  // 多行内容：第一行就是预览，后面的正文不上卡片
+  assert.equal(TT.cardPreview({ content: '修复回测空指针\n\n复现步骤 1) … 2) …' }), '修复回测空指针');
+  // 行首的 Markdown 记号要剥掉（用户会顺手写 # 或 -），否则卡片上会原样露出 #
+  assert.equal(TT.cardPreview({ content: '# 加个深色模式\n正文' }), '加个深色模式');
+  assert.equal(TT.cardPreview({ content: '- 加个深色模式' }), '加个深色模式');
+  assert.equal(TT.cardPreview({ content: '* 加个深色模式' }), '加个深色模式');
+  assert.equal(TT.cardPreview({ content: '## 二级标题' }), '二级标题');
+  // 全角空格也是缩进，要剥
+  assert.equal(TT.cardPreview({ content: '\u3000\u3000缩进开头' }), '缩进开头');
+  // 前面有空行：跳过空行找第一个非空行
+  assert.equal(TT.cardPreview({ content: '\n\n\n真正的第一行\n第二行' }), '真正的第一行');
+  // Windows 换行必须归一，\r 不能漏到卡片上
+  const crlf = TT.cardPreview({ content: '标题\r\n正文' });
+  assert.equal(crlf, '标题');
+  assert.ok(!crlf.includes('\r'));
+  // 只有一个换行符也算"没内容"
+  for (const empty of [{ content: '' }, { content: '   \n\n  \t ' }, {}, null, undefined]) {
+    assert.equal(TT.cardPreview(empty), '', `输入 ${JSON.stringify(empty)} 时预览必须是空串（调用方据此显示"(无内容)"）`);
   }
-
-  // Windows 换行必须归一，否则标题里会带 \r
-  const crlf = TT.splitMerged('标题\r\n正文一\r\n正文二');
-  assert.equal(crlf.title, '标题', 'CRLF 的 \\r 不能留在标题里');
-  assert.equal(crlf.body, '正文一\n正文二');
-  assert.ok(!crlf.title.includes('\r'));
 });
 
-test('splitMerged：标题超 200 字时截断，溢出部分并回正文开头（不丢用户内容）', () => {
-  const longTitle = 'A'.repeat(250);
-  const r = TT.splitMerged(`${longTitle}\n原有正文`);
-  assert.equal([...r.title].length, 200, '标题必须被截到 200 字（契约 1.3 上限）');
-  // 溢出的 50 个 A 必须并回正文，而不是丢掉
-  assert.ok(r.body.startsWith('A'.repeat(50)), `溢出部分应并回正文开头，实际正文开头: ${r.body.slice(0, 60)}`);
-  assert.ok(r.body.includes('原有正文'), '原有正文不能被吃掉');
-
-  // 正好 200 字不该被截
-  const exact = TT.splitMerged(`${'B'.repeat(200)}\n正文`);
-  assert.equal([...exact.title].length, 200);
-  assert.ok(!exact.body.startsWith('B'), '正好 200 字时不应把内容挤到正文里');
-
-  // 中文按字符计数（不是 UTF-16 码元，也不是字节）
-  const cn = TT.splitMerged(`${'中'.repeat(201)}\n正文`);
-  assert.equal([...cn.title].length, 200, '中文 201 字应截到 200 字');
-});
-
-test('joinMerged：编辑时把 title + body 拼回同一个框，且能被 splitMerged 还原', () => {
-  // 有正文：中间空一行（契约 6.3 的编辑回填）
-  assert.equal(TT.joinMerged({ title: '标题', body: '正文' }), '标题\n\n正文');
-  // 无正文：只回填标题，不留多余空行
-  assert.equal(TT.joinMerged({ title: '标题', body: '' }), '标题');
-  assert.equal(TT.joinMerged({ title: '标题' }), '标题');
-  assert.equal(TT.joinMerged(null), '');
-  assert.equal(TT.joinMerged({}), '');
-
-  // 往返一致性：这是关键 —— 编辑一次再保存，正文不能被改坏
-  for (const t of [
-    { title: '标题', body: '正文' },
-    { title: '多行标题情况', body: '第一段\n\n第二段\n第三行' },
-    { title: '只有标题', body: '' },
-  ]) {
-    const round = TT.splitMerged(TT.joinMerged(t));
-    assert.equal(round.title, t.title, `往返后标题必须一致: ${JSON.stringify(t)}`);
-    assert.equal(round.body, t.body, `往返后正文必须一致: ${JSON.stringify(t)}`);
-  }
+test('cardPreview：超过 80 字截断并加省略号（卡片一行放不下）', () => {
+  assert.equal(TT.PREVIEW_MAX, 80, '卡片预览上限是 80 字');
+  const long = 'A'.repeat(200);
+  const out = TT.cardPreview({ content: long });
+  assert.equal([...out].length, 81, '80 字 + 省略号，实际 ' + JSON.stringify(out.slice(-3)));
+  assert.ok(out.endsWith('…'), '截断要加省略号，让用户知道后面还有内容');
+  // 正好 80 字不截断
+  const exact = TT.cardPreview({ content: 'B'.repeat(80) });
+  assert.equal(exact, 'B'.repeat(80));
+  // 中文按字符计数，不是 UTF-16 码元
+  const cn = TT.cardPreview({ content: '中'.repeat(81) });
+  assert.equal([...cn.replace('…', '')].length, 80, '中文 81 字应截到 80 字');
 });
 
 test('textUrlFor（契约 6.5 AI 视角）：生成带 ?format=text 的可复制 URL', () => {

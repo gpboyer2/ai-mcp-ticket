@@ -13,7 +13,7 @@ test('并发建单 50 张：seq 不重不漏，且没有 500', async () => {
   const app = await startTestApp();
   try {
     const results = await Promise.all(
-      Array.from({ length: 50 }, (_, i) => create(app.base, { title: `并发 ${i}` })),
+      Array.from({ length: 50 }, (_, i) => create(app.base, { content: `并发 ${i}` })),
     );
     // 全部成功
     assert.deepEqual(
@@ -42,7 +42,7 @@ test('并发建单 50 张：seq 不重不漏，且没有 500', async () => {
 test('并发写 30 条评论到同一工单：全部成功且计数正确', async () => {
   const app = await startTestApp();
   try {
-    const t = (await create(app.base, { title: '并发评论' })).body;
+    const t = (await create(app.base, { content: '并发评论' })).body;
     const results = await Promise.all(
       Array.from({ length: 30 }, (_, i) =>
         req(app.base, `/api/tickets/${t.id}/comments`, { method: 'POST', body: { body: `评论 ${i}` } }),
@@ -65,7 +65,7 @@ test('并发写 30 条评论到同一工单：全部成功且计数正确', asyn
 test('并发改同一张工单的 status：都成功，最终态合法，position 不能是 NaN', async () => {
   const app = await startTestApp();
   try {
-    const t = (await create(app.base, { title: '并发改状态' })).body;
+    const t = (await create(app.base, { content: '并发改状态' })).body;
     const statuses = ['in_progress', 'done', 'open', 'cancelled', 'reopened'];
     const results = await Promise.all(
       statuses.map((s) => req(app.base, `/api/tickets/${t.id}`, { method: 'PATCH', body: { status: s } })),
@@ -94,7 +94,7 @@ test('并发改同一张工单的 status：都成功，最终态合法，positio
 test('并发拖拽同一张工单：都成功，最终 position 是其中一个传入值', async () => {
   const app = await startTestApp();
   try {
-    const t = (await create(app.base, { title: '并发拖拽' })).body;
+    const t = (await create(app.base, { content: '并发拖拽' })).body;
     const values = [100, 200, 300, 400];
     const results = await Promise.all(
       values.map((p) => req(app.base, `/api/tickets/${t.id}`, { method: 'PATCH', body: { position: p } })),
@@ -110,7 +110,7 @@ test('并发拖拽同一张工单：都成功，最终 position 是其中一个�
 test('并发删同一张工单：只有一次成功，其余 404（不能 500）', async () => {
   const app = await startTestApp();
   try {
-    const t = (await create(app.base, { title: '并发删除' })).body;
+    const t = (await create(app.base, { content: '并发删除' })).body;
     const results = await Promise.all(
       Array.from({ length: 5 }, () => req(app.base, `/api/tickets/${t.id}`, { method: 'DELETE' })),
     );
@@ -134,7 +134,7 @@ test('并发删同一张工单：只有一次成功，其余 404（不能 500）
 test('并发：删工单与写评论交叉，不留孤儿评论、不 500', async () => {
   const app = await startTestApp();
   try {
-    const t = (await create(app.base, { title: '删除与评论交叉' })).body;
+    const t = (await create(app.base, { content: '删除与评论交叉' })).body;
     // 同时发起：写评论 × 3 + 删工单 × 1
     const results = await Promise.all([
       req(app.base, `/api/tickets/${t.id}/comments`, { method: 'POST', body: { body: 'a' } }),

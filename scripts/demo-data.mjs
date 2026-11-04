@@ -56,8 +56,7 @@ async function api(path, { method = 'GET', body, headers = {} } = {}) {
  */
 const TICKETS = [
   {
-    title: '看板卡片显示最后一条评论摘要',
-    body: '一屏 30 张卡时，前端不要对每张卡再发一次请求拿评论（N+1）。列表接口用 with_comments=1 一次带回。',
+    content: '看板卡片显示最后一条评论摘要\n\n一屏 30 张卡时，前端不要对每张卡再发一次请求拿评论（N+1）。列表接口用 with_comments=1 一次带回。',
     status: 'in_progress',
     priority: 2,
     comments: [
@@ -66,15 +65,13 @@ const TICKETS = [
     ],
   },
   {
-    title: '纯文本列表在 status 过滤下仍返回全量 counts',
-    body: 'counts 必须是该工作区的全量计数，不受本次筛选影响，否则看板列头的数字会跟着筛选跳。',
+    content: '纯文本列表在 status 过滤下仍返回全量 counts\n\ncounts 必须是该工作区的全量计数，不受本次筛选影响，否则看板列头的数字会跟着筛选跳。',
     status: 'open',
     priority: 1,
     comments: [{ actor: 'ai2', body: '确认过 repo 层：countsOf 走独立 SQL，不带 status 条件。' }],
   },
   {
-    title: '拖拽换列后 position 落到目标列末尾',
-    body: '拖到另一列时，position 取该列当前最大值 + 1024；同列内拖动则按前后邻居取中值。',
+    content: '拖拽换列后 position 落到目标列末尾\n\n拖到另一列时，position 取该列当前最大值 + 1024；同列内拖动则按前后邻居取中值。',
     status: 'done',
     priority: 1,
     comments: [
@@ -83,22 +80,19 @@ const TICKETS = [
     ],
   },
   {
-    title: 'AI 身份必须自报 id 与 model',
-    body: 'role=ai 时缺 id 或 model 一律 400 ACTOR_REQUIRED。不允许匿名 AI —— 否则审计链断了，事后没人知道那句话是哪个模型说的。',
+    content: 'AI 身份必须自报 id 与 model\n\nrole=ai 时缺 id 或 model 一律 400 ACTOR_REQUIRED。不允许匿名 AI —— 否则审计链断了，事后没人知道那句话是哪个模型说的。',
     status: 'done',
     priority: 2,
     comments: [{ actor: 'ai2', body: '测试已覆盖：缺 model、缺 id、两者都缺三种情况都断言了 400。' }],
   },
   {
-    title: '上传图片单张限 10MB，不接受客户端文件名',
-    body: '文件名由服务端生成 {yyyyMMdd}-{8位随机}.{ext}，防路径穿越。落盘 data/uploads/，已被 .gitignore 忽略。',
+    content: '上传图片单张限 10MB，不接受客户端文件名\n\n文件名由服务端生成 {yyyyMMdd}-{8位随机}.{ext}，防路径穿越。落盘 data/uploads/，已被 .gitignore 忽略。',
     status: 'open',
     priority: 0,
     comments: [],
   },
   {
-    title: '调研：为什么不用现成的 kanban-mcp',
-    body: '四个候选里三个没有 License 文件（法律上等于保留所有权利），唯一 MIT 的已停更一年多且是四包分离架构。结论是自己写，借数据模型不借代码。详见 docs/research.md。',
+    content: '调研：为什么不用现成的 kanban-mcp\n\n四个候选里三个没有 License 文件（法律上等于保留所有权利），唯一 MIT 的已停更一年多且是四包分离架构。结论是自己写，借数据模型不借代码。详见 docs/research.md。',
     status: 'cancelled',
     priority: 0,
     comments: [{ actor: 'ai', body: '调研报告已落 docs/research.md，含竞品 star / license / 最近提交实测。' }],
@@ -157,7 +151,7 @@ async function main() {
   for (const t of TICKETS) {
     const made = await api(`/api/workspaces/${DEMO_WS_SLUG}/tickets`, {
       method: 'POST',
-      body: { title: t.title, body: t.body, status: t.status, priority: t.priority },
+      body: { content: t.content, status: t.status, priority: t.priority },
     });
     created++;
     for (const c of t.comments) {

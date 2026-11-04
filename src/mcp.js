@@ -94,8 +94,8 @@ export function buildMcpServer(ctx, { baseUrl = '' } = {}) {
           .string()
           .optional()
           .describe('状态过滤，逗号分隔，可选值: open,in_progress,reopened,done,cancelled'),
-        q: z.string().optional().describe('在标题和正文里模糊搜索'),
-        maxlen: z.number().int().min(0).optional().describe(`正文截断字数，默认 ${DEFAULT_MAXLEN}，0 表示不截断`),
+        q: z.string().optional().describe('在工单内容里模糊搜索'),
+        maxlen: z.number().int().min(0).optional().describe(`内容截断字数，默认 ${DEFAULT_MAXLEN}，0 表示不截断`),
         comments: z.number().int().min(0).optional().describe('只显示最后 N 条评论，0 表示不显示，默认全部'),
       },
       annotations: READ,
@@ -131,11 +131,11 @@ export function buildMcpServer(ctx, { baseUrl = '' } = {}) {
     {
       title: '新建工单',
       description:
-        '新建工单，返回新工单的纯文本。actor_id/actor_model 必填：填你自己的身份和模型，例如 dsh-lead / group/cherish-ai。',
+        '新建工单，返回新工单的纯文本。工单只有 content 一个内容字段（不再区分标题和正文）。' +
+        'actor_id/actor_model 必填：填你自己的身份和模型，例如 dsh-lead / group/cherish-ai。',
       inputSchema: {
         workspace: z.string().min(1).describe('工作区 slug 或 id'),
-        title: z.string().min(1).max(200).describe('标题，1..200 字'),
-        body: z.string().optional().describe('正文，Markdown 文本'),
+        content: z.string().min(1).max(100000).describe('工单内容，Markdown 文本，1..100000 字'),
         status: STATUS_ENUM.optional().describe('默认 open'),
         priority: z.number().int().min(0).max(3).optional().describe('0=低 1=普通 2=高 3=紧急，默认 1'),
         blocked_by: z.string().optional().describe('逗号分隔的 ref 列表，表示依赖'),
@@ -165,8 +165,7 @@ export function buildMcpServer(ctx, { baseUrl = '' } = {}) {
         'actor_id/actor_model 必填：填你自己的身份和模型。',
       inputSchema: {
         ref: z.string().min(1).describe('工单引用，形如 {slug}#{seq}，或 uuid'),
-        title: z.string().min(1).max(200).optional(),
-        body: z.string().optional(),
+        content: z.string().max(100000).optional().describe('新的工单内容'),
         status: STATUS_ENUM.optional().describe('改状态时 position 会自动落到目标列末尾'),
         priority: z.number().int().min(0).max(3).optional(),
         blocked_by: z.string().optional(),

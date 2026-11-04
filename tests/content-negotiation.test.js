@@ -30,7 +30,7 @@ test('同一 URL：Accept: text/plain → text/plain；默认 → text/html', as
 
     // 单张工单：先建一张
     const t = (
-      await req(app.base, `/api/workspaces/${WS}/tickets`, { method: 'POST', body: { title: '协商测试' } })
+      await req(app.base, `/api/workspaces/${WS}/tickets`, { method: 'POST', body: { content: '协商测试' } })
     ).body;
     const oneText = await reqText(app.base, `/${WS}/t/${t.seq}`, { Accept: 'text/plain' });
     assert.match(oneText.contentType, /^text\/plain/);
@@ -46,7 +46,7 @@ test('.txt 后缀 / ?format=text / ?format=txt 都强制纯文本（即使 Accep
   const app = await startTestApp();
   try {
     const t = (
-      await req(app.base, `/api/workspaces/${WS}/tickets`, { method: 'POST', body: { title: '后缀测试' } })
+      await req(app.base, `/api/workspaces/${WS}/tickets`, { method: 'POST', body: { content: '后缀测试' } })
     ).body;
 
     // 明确带 Accept: text/html，验证"后缀优先于 Accept"
@@ -105,13 +105,13 @@ test('Accept 顺序决定：text/plain 在前 → 纯文本；text/html 在前 �
 test('/api/workspaces/:ws/text 一定返回纯文本（给 MCP / 脚本用，不看 Accept）', async () => {
   const app = await startTestApp();
   try {
-    await req(app.base, `/api/workspaces/${WS}/tickets`, { method: 'POST', body: { title: 'API text' } });
+    await req(app.base, `/api/workspaces/${WS}/tickets`, { method: 'POST', body: { content: 'API text' } });
     // 带一个明确要 JSON 的 Accept，仍然必须给纯文本
     const r = await reqText(app.base, `/api/workspaces/${WS}/text`, { Accept: 'application/json' });
     assert.equal(r.status, 200);
     assert.match(r.contentType, /^text\/plain/, '契约 4.1：这个端点"保证一定返回 text"');
     assert.ok(r.text.startsWith(`# ai-mcp-ticket  workspace: ${WS}`), '内容必须是 4.2 格式的列表');
-    assert.ok(r.text.includes('title: API text'));
+    assert.ok(r.text.includes('content: API text'));
 
     // 支持 status / maxlen / comments 参数
     const filtered = await reqText(app.base, `/api/workspaces/${WS}/text?status=done`);

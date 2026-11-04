@@ -48,7 +48,7 @@
         '<button class="icon-btn more" data-act="menu" title="更多操作" aria-label="更多操作">' +
           window.icon('ellipsis', 15) + '</button>' +
       '</div>' +
-      '<div class="card-title">' + T.esc(t.title || '(无标题)') + '</div>' +
+      '<div class="card-title">' + T.esc(T.cardPreview(t) || '(无内容)') + '</div>' +
       '<div class="card-meta">' +
         (deps ? '<span class="deps">' + window.icon('link', 11) + '<span>' + deps + '</span></span>' : '') +
         '<span>' + T.timeTag(t.updated_at) + '</span>' +
@@ -151,7 +151,7 @@
         '<h1 class="pane-title" id="pane-title">工单看板</h1>' +
         '<span class="pane-path" id="pane-path"></span>' +
         '<div class="pane-tools">' +
-          '<input class="input search" id="search" type="search" placeholder="搜索标题或正文…">' +
+          '<input class="input search" id="search" type="search" placeholder="搜索内容…">' +
           // #49：原来的「全部状态」下拉已按用户要求删除（五列本身已按状态分好，再筛一次多余）
           '<button class="btn primary new-btn-wide" id="new-btn" type="button">' +
             window.icon('plus', 15) + '<span>新建工单</span></button>' +
@@ -160,7 +160,7 @@
         '</div>' +
       '</div>' +
       '<div class="quick-add">' +
-        '<input class="input" id="quick-add" type="text" placeholder="快速新建：写一行标题，回车即建">' +
+        '<input class="input" id="quick-add" type="text" placeholder="快速新建：写一行内容，回车即建">' +
         '<span class="hint">回车创建</span>' +
       '</div>' +
       '<div class="board-wrap"><div class="board" id="board">' +
@@ -212,12 +212,12 @@
     const quick = document.getElementById('quick-add');
     quick.addEventListener('keydown', async function (e) {
       if (e.key !== 'Enter') return;
-      const parsed = T.splitMerged(quick.value);
-      if (!parsed.title) return;
+      const content = quick.value.trim();
+      if (!content) return;
       if (!S.ws) return T.toast('请先选一个工作区', 'error');
       quick.disabled = true;
       try {
-        const created = await T.API.createTicket(S.ws, { title: parsed.title, body: parsed.body });
+        const created = await T.API.createTicket(S.ws, { content: content });
         quick.value = '';
         T.toast('已创建 ' + (created && created.ref ? created.ref : ''), 'ok');
         // #61：先清掉会挡住它的筛选，再刷新看板，然后滚动+高亮+右栏打开
@@ -393,7 +393,7 @@
 
   async function removeTicket(t) {
     const ok = await T.confirmDialog('删除工单',
-      '确定删除「' + t.ref + ' ' + t.title + '」？评论会一并删除，无法恢复。', '删除');
+      '确定删除「' + t.ref + ' ' + T.cardPreview(t) + '」？评论会一并删除，无法恢复。', '删除');
     if (!ok) return;
     try {
       await T.API.deleteTicket(t.id);

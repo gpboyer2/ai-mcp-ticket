@@ -23,8 +23,9 @@ function ticket(over = {}) {
     workspace_id: 'ws-1',
     workspace_slug: 'demo-project',
     seq: 12,
-    title: '修复回测空指针',
-    body: '复现步骤 1) ... 2) ...',
+    // 工单只有 content 一个内容字段（契约 1.3）：第一行是卡片预览，后面是内容的其余部分。
+    // 这里用契约 4.2 样例的形态（两行内容），断言才能逐行对上契约。
+    content: '修复回测空指针\n复现步骤 1) ... 2) ...',
     status: 'open',
     priority: 2,
     position: 1024,
@@ -92,14 +93,14 @@ test('4.2 列表格式：首行 / filter 行 / 提示行 / 条目 / 结尾，逐
     '[1] demo-project#12  打开  优先级:高  更新:2026-11-04T03:20:00.000Z',
     '条目首行必须是 `[n] ref  中文状态  优先级:X  更新:ISO`（双空格分隔）',
   );
-  assert.equal(lines[5], '    title: 修复回测空指针', 'title 行必须是 4 空格缩进');
   assert.equal(
-    lines[6],
+    lines[5],
     '    by: ai:deepseek (deepseek-v4.1) at 2026-11-04T03:00:00.000Z',
     'by 行必须是 `    by: ai:{id} ({model}) at {created_at}`',
   );
-  assert.equal(lines[7], '    blocked_by: demo-project#11', 'blocked_by 有值才输出');
-  assert.equal(lines[8], '    body: 复现步骤 1) ... 2) ...', 'body 行必须是 `    body: ` 前缀');
+  assert.equal(lines[6], '    blocked_by: demo-project#11', 'blocked_by 有值才输出');
+  assert.equal(lines[7], '    content: 修复回测空指针', 'content 行必须是 `    content: ` 前缀（首行）');
+  assert.equal(lines[8], '      复现步骤 1) ... 2) ...', 'content 续行缩进 6 空格，与内容对齐');
   assert.equal(lines[9], '    comments(2):', 'comments 块头必须是 `    comments(N):`');
   assert.equal(
     lines[10],
@@ -120,17 +121,16 @@ test('4.2 列表格式：首行 / filter 行 / 提示行 / 条目 / 结尾，逐
   assert.ok(out.endsWith('\n'), '输出必须以换行结尾');
 });
 
-test('4.2 空字段不输出那一行（body 为空则不打 body 行）', () => {
+test('4.2 空字段不输出那一行（content 为空则不打 content 行）', () => {
   const out = renderTicketList({
     workspace: WS,
-    tickets: [ticket({ body: '', blocked_by: '', comments: [] })],
+    tickets: [ticket({ content: '', blocked_by: '', comments: [] })],
     statuses: ['open'],
   });
-  assert.ok(!out.includes('body:'), 'body 为空时不能输出空的 body 行（省 token）');
+  assert.ok(!out.includes('content:'), 'content 为空时不能输出空的 content 行（省 token）');
   assert.ok(!out.includes('blocked_by:'), 'blocked_by 为空时不能输出该行');
   assert.ok(!out.includes('comments('), '没有评论时不能输出空的 comments 块');
-  // 但 title / by 这些必有的字段还在
-  assert.ok(out.includes('    title: 修复回测空指针'));
+  // 但 by 这些必有的字段还在
   assert.ok(out.includes('    by: '));
 });
 
@@ -139,35 +139,35 @@ test('4.2 maxlen 截断：默认 800，?maxlen=0 不截断，超长加 …(截�
 
   const long = '一'.repeat(1000);
   // 默认截断
-  const def = renderTicketList({ workspace: WS, tickets: [ticket({ body: long, comments: [] })], statuses: ['open'] });
-  const bodyLine = def.split('\n').find((l) => l.startsWith('    body: '));
-  assert.ok(bodyLine.endsWith('…(截断)'), '超过 maxlen 必须加 `…(截断)` 标记');
-  const keptChars = [...bodyLine.replace('    body: ', '').replace('…(截断)', '')].length;
+  const def = renderTicketList({ workspace: WS, tickets: [ticket({ content: long, comments: [] })], statuses: ['open'] });
+  const contentLine = def.split('\n').find((l) => l.startsWith('    content: '));
+  assert.ok(contentLine.endsWith('…(截断)'), '超过 maxlen 必须加 `…(截断)` 标记');
+  const keptChars = [...contentLine.replace('    content: ', '').replace('…(截断)', '')].length;
   assert.equal(keptChars, 800, `默认应保留 800 字，实际 ${keptChars}`);
 
   // maxlen=0 不截断
   const noTrunc = renderTicketList({
     workspace: WS,
-    tickets: [ticket({ body: long, comments: [] })],
+    tickets: [ticket({ content: long, comments: [] })],
     statuses: ['open'],
     maxlen: 0,
   });
   assert.ok(!noTrunc.includes('…(截断)'), 'maxlen=0 表示不截断（契约 4.2）');
-  assert.ok(noTrunc.includes(long), 'maxlen=0 时正文必须完整保留');
+  assert.ok(noTrunc.includes(long), 'maxlen=0 时内容必须完整保留');
 
   // 自定义 maxlen
   const m10 = renderTicketList({
     workspace: WS,
-    tickets: [ticket({ body: '一二三四五六七八九十', comments: [] })],
+    tickets: [ticket({ content: '一二三四五六七八九十', comments: [] })],
     statuses: ['open'],
     maxlen: 5,
   });
-  assert.ok(m10.includes('    body: 一二三四五…(截断)'), 'maxlen=5 应只留前 5 个字');
+  assert.ok(m10.includes('    content: 一二三四五…(截断)'), 'maxlen=5 应只留前 5 个字');
 
   // 正好等于 maxlen 时不截断（边界）
   const exact = renderTicketList({
     workspace: WS,
-    tickets: [ticket({ body: '一二三四五', comments: [] })],
+    tickets: [ticket({ content: '一二三四五', comments: [] })],
     statuses: ['open'],
     maxlen: 5,
   });
@@ -231,16 +231,16 @@ test('4.2 comments=N 只显示最后 N 条，并注明共 N 条', () => {
   assert.ok(!more.includes('仅显示'), '没有截断时不能出现"仅显示"');
 });
 
-test('4.2 多行正文缩进对齐，不破坏段落结构', () => {
+test('4.2 多行内容缩进对齐，不破坏段落结构', () => {
   const out = renderTicketList({
     workspace: WS,
-    tickets: [ticket({ body: '第一行\n第二行\n第三行', comments: [] })],
+    tickets: [ticket({ content: '第一行\n第二行\n第三行', comments: [] })],
     statuses: ['open'],
   });
   const lines = out.split('\n');
-  const i = lines.findIndex((l) => l.startsWith('    body: '));
-  assert.equal(lines[i], '    body: 第一行');
-  assert.equal(lines[i + 1], '      第二行', '续行应缩进 6 空格，与 body 内容对齐');
+  const i = lines.findIndex((l) => l.startsWith('    content: '));
+  assert.equal(lines[i], '    content: 第一行');
+  assert.equal(lines[i + 1], '      第二行', '续行应缩进 6 空格，与 content 内容对齐');
   assert.equal(lines[i + 2], '      第三行');
 });
 
@@ -267,9 +267,10 @@ test('4.3 单张工单纯文本格式', () => {
   assert.equal(lines[5], 'blocked_by: demo-project#11');
   assert.equal(lines[6], 'id: 6f1c0000-0000-4000-8000-000000000001', 'id 行必须给 uuid（AI 写评论要用）');
 
-  const bodyIdx = lines.indexOf('## 正文');
-  assert.ok(bodyIdx > 0, '必须有 `## 正文` 段');
-  assert.equal(lines[bodyIdx + 1], '复现步骤 1) ... 2) ...');
+  const contentIdx = lines.indexOf('## 内容');
+  assert.ok(contentIdx > 0, '必须有 `## 内容` 段（契约 4.3）');
+  assert.equal(lines[contentIdx + 1], '修复回测空指针', 'content 第一行也要原样给出，不能只给正文');
+  assert.equal(lines[contentIdx + 2], '复现步骤 1) ... 2) ...', 'content 必须整份给出，不丢行');
 
   const cmtIdx = lines.indexOf('## 评论 (2)');
   assert.ok(cmtIdx > 0, '必须有 `## 评论 (N)` 段，N 是真实条数');
@@ -279,9 +280,9 @@ test('4.3 单张工单纯文本格式', () => {
   assert.ok(out.includes('# end.'), '必须有结尾行');
 });
 
-test('4.3 空正文 / 无评论时有明确占位，不留空行让 AI 猜', () => {
-  const out = renderTicket(ticket({ body: '', comments: [] }), { workspace: WS });
-  assert.ok(out.includes('## 正文\n(空)'), '正文为空应写 (空)，而不是留一片空白');
+test('4.3 空内容 / 无评论时有明确占位，不留空行让 AI 猜', () => {
+  const out = renderTicket(ticket({ content: '', comments: [] }), { workspace: WS });
+  assert.ok(out.includes('## 内容\n(空)'), '内容为空应写 (空)，而不是留一片空白');
   assert.ok(out.includes('## 评论 (0)'), '无评论时仍要给出条数 0');
   assert.ok(out.includes('(暂无评论)'), '无评论时要有明确占位');
 });

@@ -29,7 +29,7 @@ role = 'user' | 'ai'
 - `user`：用户本人。固定 `actor id="user"`，`model=null`。
 - `ai`：任何 AI，**必须自我声明 `id` 与 `model`**（`id` 自选标识如 `deepseek`，`model` 当前模型如 `deepseek-v4.1`）。换模型用新 `model` 写，历史评论保留当时 model，不改写。
 
-每条写入（工单、评论）记录 `actor_id + role + model + created_at`，这四项是**审计事实，创建后不可改**（正文可改，`updated_at` 随之变）。
+每条写入（工单、评论）记录 `actor_id + role + model + created_at`，这四项是**审计事实，创建后不可改**（工单 content / 评论 body 可改，`updated_at` 随之变）。
 
 ### 1.2 工作区（只读镜像）
 
@@ -49,8 +49,7 @@ ticket:
   ref           "{workspace_slug}#{seq}"，例 "demo-project#12"
   workspace_id  所属工作区
   seq           工作区内自增序号（1,2,3...，不回收）
-  title         标题，必填，1..200 字
-  body          正文（Markdown），可空，上限 100000 字
+  content       内容（Markdown），必填，1..100000 字
   status        open | in_progress | reopened | done | cancelled   默认 open
   priority      0=low 1=normal 2=high 3=urgent                        默认 1
   position      float，同 status 内排序（拖拽用，越小越靠前）
@@ -70,7 +69,20 @@ ticket:
 四个字段一起写、一起清；`claimed_at` 超过 6 小时（`CLAIM_STALE_MS`）视为过期，允许他人接管。
 状态改成 `done` / `cancelled` 时自动清空这四项。规则细节见 3.2。
 
-**写入前长度校验，超了返回 400 `BODY_TOO_LONG`**：`title` ≤ 200、`body` ≤ 100000、评论 `body` ≤ 10000。
+**只有 content 一个内容字段（用户 ai-mcp-ticket#5）**：工单不再区分「标题」与「正文」，
+`title` / `body` 两个概念一律废除。卡片上显示的第一行只是 content 的预览，不是独立字段。
+
+迁移（`SCHEMA_VERSION` 升到 **3**）：`tickets` 表加 `content` 列，存量按
+`content = title + (body 非空 ? "\n\n" + body : "")` 回填，随后 `title` / `body` 两列彻底从表里移除
+（`title` 是 `NOT NULL`，留着就必须每次写入编造一个值，那是假兼容）。
+
+做法是 SQLite 官方的表重建流程，全程一个事务：建新表（含 `content`）→
+`INSERT INTO 新表 SELECT ... title || ... AS content FROM 旧表` → 删旧表 → 改名 → 重建索引。
+事务内先记 `SELECT COUNT(*)`，重建后再比一次，**行数不等就抛错回滚**。
+禁止的是「DROP 之后靠空表/默认值重建」，那会丢用户工单；这里的数据是逐行复制过去的。
+
+**写入前长度校验**：`content` 1..100000 字，空 → 400 `CONTENT_REQUIRED`，超长 → 400 `CONTENT_TOO_LONG`；
+评论 `body` 1..10000 字，空 → 400 `BODY_REQUIRED`，超长 → 400 `BODY_TOO_LONG`。
 
 **`blocked_by` 校验**：每个 ref 须形如 `{slug}#{seq}` 且**真实存在**，否则 400 `BLOCKED_BY_INVALID`；允许空字符串表示无依赖。
 
@@ -181,14 +193,14 @@ claimed_at      TEXT    ISO8601 UTC
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/api/workspaces/:ws/tickets` | 列表（`ws` 可为 id 或 slug；查询参数见下） |
-| POST | `/api/workspaces/:ws/tickets` | 新建。body: `{title, body?, status?, priority?, blocked_by?}` |
+| POST | `/api/workspaces/:ws/tickets` | 新建。body: `{content, status?, priority?, blocked_by?}` |
 | GET | `/api/tickets/:id` | 单条（含 `comments`） |
-| PATCH | `/api/tickets/:id` | 局部更新。body 可含 `title, body, status, priority, blocked_by, position` |
+| PATCH | `/api/tickets/:id` | 局部更新。body 可含 `content, status, priority, blocked_by, position` |
 | POST | `/api/tickets/:id/claim` | 认领工单，返回工单 JSON（含认领四字段） |
 | POST | `/api/tickets/:id/release` | 释放认领，返回工单 JSON |
 | DELETE | `/api/tickets/:id` | 删除（级联删评论），返回 `{deleted:true}` |
 
-列表查询参数：`status`（可重复/逗号）、`priority`、`q`（title+body 模糊）、`sort`（`position`(默认)|`created_at`|`updated_at`|`priority`）、`order`（`asc`|`desc`）、`limit`（默认 200，上限 1000）、`offset`、`with_comments=1`（附带 `comments`，供卡片显示最后一条评论）。
+列表查询参数：`status`（可重复/逗号）、`priority`、`q`（content 模糊）、`sort`（`position`(默认)|`created_at`|`updated_at`|`priority`）、`order`（`asc`|`desc`）、`limit`（默认 200，上限 1000）、`offset`、`with_comments=1`（附带 `comments`，供卡片显示最后一条评论）。
 
 列表返回：`{ workspace:{...}, tickets:[...], counts:{...} }`；`counts` 必须含五状态 + `total`，且为**该工作区全量计数**（不受筛选影响）。
 
@@ -282,17 +294,17 @@ claimed_at      TEXT    ISO8601 UTC
 # 提示: 读 /{ws}/list?status=... 拿最新；写评论用 POST /api/tickets/{id}/comments，需带 X-Actor-Id/X-Actor-Role/X-Actor-Model
 
 [1] demo-project#12  打开  优先级:高  更新:2026-11-04T03:20:00.000Z
-    title: 修复回测空指针
     by: ai:deepseek (deepseek-v4.1) at 2026-11-04T03:00:00.000Z
     blocked_by: demo-project#11
     assignee: ai:deepseek (deepseek-v4.1) since 2026-11-04T03:05:00.000Z
-    body: 复现步骤 1) ... 2) ...
+    content: 修复回测空指针
+      复现步骤 1) ... 2) ...
     comments(2):
       - 2026-11-04T03:10:00.000Z ai:deepseek (deepseek-v4.1): 已定位到 xxx
       - 2026-11-04T03:15:00.000Z user: 再加一条要求 yyy
 
 [2] demo-project#13  处理中  优先级:普通  更新:...
-    title: ...
+    content: ...
 ```
 
 约定：
@@ -300,7 +312,7 @@ claimed_at      TEXT    ISO8601 UTC
 - 序号 `[n]` 为本次列表展示序号（1 起），真实引用是 `{slug}#{seq}`
 - 空字段不输出那一行；**未被认领时连 `assignee` 行都不出现**（省 token）
 - 已被认领时在 `blocked_by` 行之后加一行 `assignee: <actorLabel> since <claimed_at>`，`user` 认领写 `assignee: user since <claimed_at>`
-- 正文超 `maxlen`（默认 800，`?maxlen=` 可调，0 不截断）截断加 `…(截断)`
+- `content` 超 `maxlen`（默认 800，`?maxlen=` 可调，0 不截断）截断加 `…(截断)`
 - `?comments=0` 隐藏评论（默认全显）；`?comments=5` 只显最后 5 条并注 `(共 N 条，仅显示最后 5 条)`
 - 末尾固定：`# end. 用 ?status= 过滤，?format=text 强制纯文本`
 
@@ -316,7 +328,8 @@ blocked_by: demo-project#11
 assignee: ai:deepseek (deepseek-v4.1) since 2026-11-04T03:05:00.000Z
 id: 6f1c...
 
-## 正文
+## 内容
+修复回测空指针
 复现步骤 ...
 
 ## 评论 (2)
@@ -337,8 +350,8 @@ id: 6f1c...
 | `workspace_list` | `include_archived?:boolean` | 工作区列表（含各状态计数） |
 | `ticket_list` | `workspace, status?, q?, maxlen?, comments?` | 工单列表纯文本（同 4.2） |
 | `ticket_get` | `ref`（`{slug}#{seq}` 或 uuid） | 单张工单纯文本（同 4.3） |
-| `ticket_create` | `workspace, title, body?, status?, priority?, blocked_by?, actor_id, actor_model` | 新建，返回新工单纯文本 |
-| `ticket_update` | `ref, title?, body?, status?, priority?, blocked_by?, position?, actor_id, actor_model` | 更新，返回更新后纯文本 |
+| `ticket_create` | `workspace, content, status?, priority?, blocked_by?, actor_id, actor_model` | 新建，返回新工单纯文本 |
+| `ticket_update` | `ref, content?, status?, priority?, blocked_by?, position?, actor_id, actor_model` | 更新，返回更新后纯文本 |
 | `ticket_claim` | `ref, actor_id, actor_model` | 认领（锁定）工单，返回工单纯文本；已被他人认领时返回提示 |
 | `ticket_release` | `ref, actor_id, actor_model` | 释放自己对该工单的认领，返回工单纯文本 |
 | `ticket_delete` | `ref, actor_id, actor_model` | 删除，返回 `deleted: ref` |
