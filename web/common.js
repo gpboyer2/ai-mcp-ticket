@@ -124,6 +124,13 @@
     deleteTicket: function (id) {
       return api('/api/tickets/' + encodeURIComponent(id), { method: 'DELETE' });
     },
+    // 认领 / 释放（契约 3.2）：认领后别的会话看到"已被认领"就不会来改这张工单
+    claimTicket: function (idOrRef) {
+      return api('/api/tickets/' + encodeURIComponent(idOrRef) + '/claim', { method: 'POST', body: {} });
+    },
+    releaseTicket: function (idOrRef) {
+      return api('/api/tickets/' + encodeURIComponent(idOrRef) + '/release', { method: 'POST', body: {} });
+    },
     addComment: function (ticketId, body) {
       return api('/api/tickets/' + encodeURIComponent(ticketId) + '/comments', { method: 'POST', body: { body: body } });
     },

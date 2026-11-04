@@ -9,7 +9,13 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const DEFAULT_DB_PATH = path.join(ROOT, 'data', 'ticket.db');
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
+
+// 认领（锁定）惰性过期时长（契约 1.6 / 3.2.1）。
+// ⚠️ 契约自相矛盾：1.6 正文第 5 条写「30 分钟」，但 1.6 数据模型注释、3.2.1 都写「6 小时（CLAIM_STALE_MS）」。
+// 这里取 6 小时作为单一常量默认值（与命名常量 CLAIM_STALE_MS 对齐、且被「可调常量」描述过两次），
+// 30 分钟/6 小时的最终取值待 lead / 用户拍板。改这一行即可全局调整。
+export const CLAIM_STALE_MS = 6 * 60 * 60 * 1000;
 
 /** DB_PATH 环境变量 / 显式参数 / 默认 data/ticket.db */
 export function resolveDbPath(dbPath) {
@@ -47,6 +53,10 @@ CREATE TABLE IF NOT EXISTS tickets (
   actor_id     TEXT NOT NULL,
   actor_role   TEXT NOT NULL CHECK (actor_role IN ('user','ai')),
   model        TEXT,
+  assignee_id     TEXT,                       -- 认领者 id（NULL = 未认领）
+  assignee_role   TEXT CHECK (assignee_role IN ('user','ai')),  -- 认领者角色
+  assignee_model  TEXT,                       -- 认领者模型（user 为 NULL）
+  claimed_at      TEXT,                        -- 认领时间 ISO8601 UTC
   created_at   TEXT NOT NULL,
   updated_at   TEXT NOT NULL
 );
@@ -78,13 +88,27 @@ CREATE INDEX        IF NOT EXISTS comments_ticket     ON comments(ticket_id, cre
 CREATE UNIQUE INDEX IF NOT EXISTS actors_uniq         ON actors(id, role, COALESCE(model, ''));
 `;
 
+/** 幂等加列：已存在的库用 ALTER 增量加，绝不 DROP 重建（用户库有真实工单，丢了不可恢复） */
+function addColumnIfMissing(db, table, col, def) {
+  const cols = db.pragma(`table_info(${table})`);
+  if (!cols.some((c) => c.name === col)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+  }
+}
+
 function migrate(db) {
   const from = db.pragma('user_version', { simple: true });
   if (from >= SCHEMA_VERSION) return from;
 
   db.transaction(() => {
     db.exec(SCHEMA);
-    // 以后的迁移按版本号递进，例如：if (from < 2) db.exec('ALTER TABLE ...');
+    // 1 → 2：tickets 表加认领四列（已存在库走 ALTER，全新库 CREATE TABLE 已含）
+    if (from < 2) {
+      addColumnIfMissing(db, 'tickets', 'assignee_id', 'TEXT');
+      addColumnIfMissing(db, 'tickets', 'assignee_role', "TEXT CHECK (assignee_role IN ('user','ai'))");
+      addColumnIfMissing(db, 'tickets', 'assignee_model', 'TEXT');
+      addColumnIfMissing(db, 'tickets', 'claimed_at', 'TEXT');
+    }
     db.pragma(`user_version = ${SCHEMA_VERSION}`);
   })();
 

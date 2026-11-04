@@ -53,7 +53,7 @@ ai-mcp-ticket/
 │   ├── app.js                   Express 装配：路由挂载 / 内容协商 / 错误处理
 │   ├── db.js                    唯一数据库连接：读 DB_PATH，建表，开 WAL
 │   ├── actor.js                 身份解析：X-Actor-Id / X-Actor-Role / X-Actor-Model
-│   ├── mcp.js                   MCP 服务：10 个工具，走 /mcp
+│   ├── mcp.js                   MCP 服务：12 个工具，走 /mcp
 │   ├── views.js                 HTML 视图
 │   ├── workspace-sync.js        从 DeepSeek Harness 只读同步工作区，读 DSH_HOME
 │   ├── repo/                    数据层，只操作本文件登记的表

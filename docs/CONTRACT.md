@@ -58,9 +58,17 @@ ticket:
   actor_id      创建者
   actor_role    user | ai
   model         创建者模型（user 为 null）
+  assignee_id    认领者 id（未被认领为 null）
+  assignee_role  认领者角色 user | ai（未被认领为 null）
+  assignee_model 认领者模型（user 为 null）
+  claimed_at     认领时间 ISO8601 UTC（未被认领为 null）
   created_at    ISO8601 UTC
   updated_at    ISO8601 UTC
 ```
+
+**认领（锁定）**：`assignee_id` 非空即"已被认领"，表示某个会话正在改这张工单，别人不要动。
+四个字段一起写、一起清；`claimed_at` 超过 6 小时（`CLAIM_STALE_MS`）视为过期，允许他人接管。
+状态改成 `done` / `cancelled` 时自动清空这四项。规则细节见 3.2。
 
 **写入前长度校验，超了返回 400 `BODY_TOO_LONG`**：`title` ≤ 200、`body` ≤ 100000、评论 `body` ≤ 10000。
 
@@ -85,6 +93,57 @@ comment:
 ```
 
 评论按 `created_at` 升序（同毫秒按自增 `rowid`）。
+
+### 1.6 认领（claim / 锁定）—— 用户 ai-mcp-ticket#2
+
+**为什么需要**：多个 AI 会话可能同时看到同一张工单并同时动手改，互相覆盖。
+认领就是「这张单我先占了，别人别动」。
+
+用户原话：「我意识到可能有多个会话在同时修改相关的任务，那么我们这个工单就必须要有一个锁定或者指派的概念。
+然后被指派后……目的是让别的会话在修改过程中发现这个工单已经被别人、被某个人或者某个会话认领了，那么他就暂时不要去动。」
+
+#### 数据模型（tickets 表加 4 列）
+
+```
+assignee_id     TEXT    认领者 id（空 = 未认领）
+assignee_role   TEXT    user | ai
+assignee_model  TEXT    AI 的模型名（user 为 null）
+claimed_at      TEXT    ISO8601 UTC
+```
+
+`SCHEMA_VERSION` 升到 **2**。迁移必须用 `ALTER TABLE ADD COLUMN` 增量加列，
+**不许 DROP 重建** —— 用户库里已有真实工单，丢了不可恢复（这是本项目曾踩过的坑）。
+
+#### 规则
+
+1. **认领**：`POST /api/tickets/:id/claim`（带身份）。成功后四列全填。
+2. **抢占**：已被别人认领时再认领 → **409 `TICKET_CLAIMED`**，错误信息里带上
+   「被谁认领（id + role + model）、什么时候」。
+3. **幂等**：同一 actor 重复认领 → 200，只刷新 `claimed_at`。
+4. **释放**：`POST /api/tickets/:id/release`。只有认领者本人能释放；别人释放 → 409 `TICKET_CLAIMED`。
+5. **超时**：认领超过 **30 分钟**自动失效。惰性判定——读的时候发现超期就当未认领，不需要定时任务。
+6. **写操作保护**：已认领且调用者不是认领者时，`PATCH` / `DELETE` / `comment_add` → **409 `TICKET_CLAIMED`**。
+   **例外：`role=user` 永远可以覆盖** —— 用户是老板，不能被 AI 锁死。
+7. **删除工单**不受认领限制（用户的清理动作不能被卡）。
+
+#### 纯文本视图（关键）
+
+已认领的工单，在列表和单条视图里都多一行：
+
+```
+    claimed_by: ai:deepseek-v4.1 at 2026-11-04T09:00:00.000Z
+```
+
+**理由**：AI 读列表时就该看到「这张被别人占了，别动」，而不是等动手时被 409 拒。
+这是本项目「给 AI 纯文本」的核心价值 —— 把冲突信息前置到读的时候。
+
+#### MCP 工具（从 10 个增至 13 个）
+
+| 工具 | 入参 | 作用 |
+|---|---|---|
+| `ticket_claim` | `ref, actor_id, actor_model` | 认领；已被别人认领时返回 409 的文本说明 |
+| `ticket_release` | `ref, actor_id, actor_model` | 释放（仅认领者） |
+| `ticket_list` | 同前 | 返回里已认领的工单带 `claimed_by:` 行 |
 
 ---
 
@@ -125,6 +184,8 @@ comment:
 | POST | `/api/workspaces/:ws/tickets` | 新建。body: `{title, body?, status?, priority?, blocked_by?}` |
 | GET | `/api/tickets/:id` | 单条（含 `comments`） |
 | PATCH | `/api/tickets/:id` | 局部更新。body 可含 `title, body, status, priority, blocked_by, position` |
+| POST | `/api/tickets/:id/claim` | 认领工单，返回工单 JSON（含认领四字段） |
+| POST | `/api/tickets/:id/release` | 释放认领，返回工单 JSON |
 | DELETE | `/api/tickets/:id` | 删除（级联删评论），返回 `{deleted:true}` |
 
 列表查询参数：`status`（可重复/逗号）、`priority`、`q`（title+body 模糊）、`sort`（`position`(默认)|`created_at`|`updated_at`|`priority`）、`order`（`asc`|`desc`）、`limit`（默认 200，上限 1000）、`offset`、`with_comments=1`（附带 `comments`，供卡片显示最后一条评论）。
@@ -132,6 +193,31 @@ comment:
 列表返回：`{ workspace:{...}, tickets:[...], counts:{...} }`；`counts` 必须含五状态 + `total`，且为**该工作区全量计数**（不受筛选影响）。
 
 `status` 变化时后端自动把 `position` 放到目标列末尾（除非显式传 `position`）。
+
+#### 3.2.1 认领 / 释放（防多会话同时改同一张工单）
+
+身份按第 2 节解析（复用同一套 `actorOf`）。`claimed_at` 超过 6 小时（`CLAIM_STALE_MS`，可调常量）算过期。
+
+`POST /api/tickets/:id/claim`：
+
+| 当前状态 | 结果 |
+|---|---|
+| 未被认领 | 认领成功：写入认领者 id/role/model 与 `claimed_at`，刷新 `updated_at`，200 |
+| 已被同一 actor 认领（id+role 相同） | 幂等成功，`claimed_at` 续期到当前时间 |
+| 已被他人认领且未过期 | **409 `TICKET_CLAIMED`**，message 带当前认领者 id/role/model 与 `claimed_at` |
+| 已被他人认领但已过期 | 允许接管：覆盖为本 actor，响应体多带 `took_over: true` |
+
+`POST /api/tickets/:id/release`：
+
+| 当前状态 | 结果 |
+|---|---|
+| 未被认领 | 幂等成功，200 |
+| 认领者本人（id+role 相同） | 释放，四个字段置 NULL |
+| 调用者 `role=user` | 可释放任何人的认领 |
+| 其它 AI 且未过期 | **403 `CLAIM_NOT_OWNER`** |
+| 其它 AI 且已过期 | 视为接管释放（四个字段置 NULL） |
+
+自动释放：`PATCH /api/tickets/:id` 把 `status` 改成 `done` / `cancelled` 时，同一次 UPDATE 里把认领四字段置 NULL。
 
 ### 3.3 评论
 
@@ -199,6 +285,7 @@ comment:
     title: 修复回测空指针
     by: ai:deepseek (deepseek-v4.1) at 2026-11-04T03:00:00.000Z
     blocked_by: demo-project#11
+    assignee: ai:deepseek (deepseek-v4.1) since 2026-11-04T03:05:00.000Z
     body: 复现步骤 1) ... 2) ...
     comments(2):
       - 2026-11-04T03:10:00.000Z ai:deepseek (deepseek-v4.1): 已定位到 xxx
@@ -211,7 +298,8 @@ comment:
 约定：
 
 - 序号 `[n]` 为本次列表展示序号（1 起），真实引用是 `{slug}#{seq}`
-- 空字段不输出那一行
+- 空字段不输出那一行；**未被认领时连 `assignee` 行都不出现**（省 token）
+- 已被认领时在 `blocked_by` 行之后加一行 `assignee: <actorLabel> since <claimed_at>`，`user` 认领写 `assignee: user since <claimed_at>`
 - 正文超 `maxlen`（默认 800，`?maxlen=` 可调，0 不截断）截断加 `…(截断)`
 - `?comments=0` 隐藏评论（默认全显）；`?comments=5` 只显最后 5 条并注 `(共 N 条，仅显示最后 5 条)`
 - 末尾固定：`# end. 用 ?status= 过滤，?format=text 强制纯文本`
@@ -225,6 +313,7 @@ workspace: demo-project  path: /path/to/your/workspace/demo-project
 created: 2026-11-04T03:00:00.000Z by ai:deepseek (deepseek-v4.1)
 updated: 2026-11-04T03:20:00.000Z
 blocked_by: demo-project#11
+assignee: ai:deepseek (deepseek-v4.1) since 2026-11-04T03:05:00.000Z
 id: 6f1c...
 
 ## 正文
@@ -239,7 +328,7 @@ id: 6f1c...
 
 ---
 
-## 5. MCP 工具（serverName = `ticket`，DSH 中显示 `mcp__ticket__*`）
+## 5. MCP 工具（12 个；serverName = `ticket`，DSH 中显示 `mcp__ticket__*`）
 
 所有工具**返回纯文本**（`content:[{type:'text', text}]`），不返回 JSON。写操作成功后回显结果。
 
@@ -250,6 +339,8 @@ id: 6f1c...
 | `ticket_get` | `ref`（`{slug}#{seq}` 或 uuid） | 单张工单纯文本（同 4.3） |
 | `ticket_create` | `workspace, title, body?, status?, priority?, blocked_by?, actor_id, actor_model` | 新建，返回新工单纯文本 |
 | `ticket_update` | `ref, title?, body?, status?, priority?, blocked_by?, position?, actor_id, actor_model` | 更新，返回更新后纯文本 |
+| `ticket_claim` | `ref, actor_id, actor_model` | 认领（锁定）工单，返回工单纯文本；已被他人认领时返回提示 |
+| `ticket_release` | `ref, actor_id, actor_model` | 释放自己对该工单的认领，返回工单纯文本 |
 | `ticket_delete` | `ref, actor_id, actor_model` | 删除，返回 `deleted: ref` |
 | `comment_list` | `ref` | 评论纯文本 |
 | `comment_add` | `ref, body, actor_id, actor_model` | 加评论，返回该工单最新纯文本 |
@@ -286,7 +377,10 @@ cancelled   → reopened | cancelled(幂等)
 | `status=open` 且本次 `comment_add`（AI） | `# 状态提醒: 该工单仍是「打开」。若你已开始处理，请调 ticket_update status=in_progress` |
 | `status=in_progress` 且本次 `comment_add` 正文命中完成词（已完成/搞定了/已修复/已解决/修好了/done/fixed/resolved） | `# 状态提醒: 评论像是完工报告。若确实已完成，请调 ticket_update status=done` |
 | `status=open` 且本次 `ticket_create`（AI） | `# 状态提醒: 新建的工单是「打开」。开始处理时请调 ticket_update status=in_progress` |
+| 本次是写操作，且工单被**他人**认领且未过期 | `# 锁定提醒: 该工单已被 ai:other (model) 于 <claimed_at> 认领，请勿修改或评论` |
 | 其它 | 不追加 |
+
+锁定提醒与状态提醒是两条独立规则（`claimLockHint` / `statusHint`），可以同时出现，各自一行，中间空一行。
 
 #### 5.5.3 工具描述要求
 

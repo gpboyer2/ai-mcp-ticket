@@ -96,6 +96,10 @@ export function renderTicketList({
       `    by: ${actorLabel(t.actor_id, t.actor_role, t.model)} at ${t.created_at}`,
     );
     if (t.blocked_by) lines.push(`    blocked_by: ${t.blocked_by}`);
+    // 契约 1.6 / 4.2：已认领（且未过期）的工单多一行，让 AI 读列表时就知道"这张被占了，别动"
+    if (t.assignee_id) {
+      lines.push(`    assignee: ${actorLabel(t.assignee_id, t.assignee_role, t.assignee_model)} since ${t.claimed_at}`);
+    }
     if (t.body && t.body.trim()) {
       lines.push(indentBlock(truncate(t.body, maxlen), '    body: ', '      '));
     }
@@ -158,6 +162,10 @@ export function renderTicket(ticket, { maxlen = 0, workspace, hint = null, baseU
     `updated: ${ticket.updated_at}`,
   ];
   if (ticket.blocked_by) lines.push(`blocked_by: ${ticket.blocked_by}`);
+  // 契约 1.6 / 4.3：已认领（且未过期）多一行 assignee
+  if (ticket.assignee_id) {
+    lines.push(`assignee: ${actorLabel(ticket.assignee_id, ticket.assignee_role, ticket.assignee_model)} since ${ticket.claimed_at}`);
+  }
   lines.push(`id: ${ticket.id}`);
 
   lines.push('', '## 正文');

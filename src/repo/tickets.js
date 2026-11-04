@@ -1,12 +1,26 @@
 // 工单数据访问。所有写操作走事务，统一维护 updated_at；
 // position 的"落到列末尾"逻辑集中在这里，REST / MCP 都调它，避免两套排序规则。
-import { newId, nowIso } from '../db.js';
+import { newId, nowIso, CLAIM_STALE_MS } from '../db.js';
 import { HttpError } from '../actor.js';
 import { STATUSES, parseStatusFilter } from './workspaces.js';
 
 export const POSITION_STEP = 1024;
 
+/**
+ * 认领是否仍有效（惰性过期）：assignee 非空 且 claimed_at 距今未超过 CLAIM_STALE_MS。
+ * 过期即视为「未认领」，读时判定，不需要定时任务。
+ * @param {object} r 原始行（含 assignee_id / claimed_at）
+ */
+function isClaimActive(r) {
+  if (!r.assignee_id) return false;
+  const claimed = Date.parse(r.claimed_at);
+  if (Number.isNaN(claimed)) return false;
+  return Date.now() - claimed < CLAIM_STALE_MS;
+}
+
 function rowToTicket(r, slug) {
+  // 惰性过期：读出的工单若认领已过期，四列按未认领返回（NULL），保证 API / 纯文本视图一致
+  const active = isClaimActive(r);
   return {
     id: r.id,
     ref: `${slug}#${r.seq}`,
@@ -22,6 +36,10 @@ function rowToTicket(r, slug) {
     actor_id: r.actor_id,
     actor_role: r.actor_role,
     model: r.model ?? null,
+    assignee_id: active ? r.assignee_id : null,
+    assignee_role: active ? r.assignee_role : null,
+    assignee_model: active ? r.assignee_model ?? null : null,
+    claimed_at: active ? r.claimed_at : null,
     created_at: r.created_at,
     updated_at: r.updated_at,
   };
@@ -323,6 +341,10 @@ export function createTicketRepo(db, workspaceRepo) {
       // 换列时默认落到目标列末尾；显式传 position（拖拽）则尊重传入值
       sets.push('position = ?');
       params.push(explicitPos !== null ? explicitPos : tailPosition(current.workspace_id, nextStatus));
+      // 契约 3.2.1：状态改成 done / cancelled 时，同一次 UPDATE 里把认领四字段置 NULL（自动释放）
+      if (nextStatus === 'done' || nextStatus === 'cancelled') {
+        sets.push('assignee_id = NULL', 'assignee_role = NULL', 'assignee_model = NULL', 'claimed_at = NULL');
+      }
     } else if (explicitPos !== null) {
       sets.push('position = ?');
       params.push(explicitPos);
@@ -351,5 +373,118 @@ export function createTicketRepo(db, workspaceRepo) {
     return { deleted: true, ref: t.ref };
   }
 
-  return { list, get, create, update, remove, findByIdOrRef, requireWorkspace, requireTicket, countAll };
+  // ---------- 认领（锁定）：契约 1.6 / 3.2.1 ----------
+
+  /** 同一 actor 判定：id + role 相同（契约 3.2.1 表格） */
+  const isSameActor = (a, b) => !!a && !!b && a.id === b.id && a.role === b.role;
+
+  /** 读原始行（含所有认领字段、含已过期的），供 claim/release/assertWritable 判定，
+   *  不受 rowToTicket 的惰性过期屏蔽影响。404 时抛 TICKET_NOT_FOUND。 */
+  function requireRawRow(idOrRef) {
+    const t = findByIdOrRef(idOrRef);
+    if (!t) throw new HttpError(404, 'TICKET_NOT_FOUND', `工单不存在: ${idOrRef}`);
+    // findByIdOrRef 返回的是过期归一后的 VO，这里要原始列，所以直接查库
+    return db.prepare('SELECT * FROM tickets WHERE id = ?').get(t.id);
+  }
+
+  /** 当前真实有效的认领者（过期返回 null）；基于原始行 */
+  function activeHolder(r) {
+    if (!isClaimActive(r)) return null;
+    return { id: r.assignee_id, role: r.assignee_role, model: r.assignee_model };
+  }
+
+  /** 给认领者造一句"被谁认领"，409 错误信息里要带上（id/role/model + 时间） */
+  function claimHolderText(r) {
+    const who = r.assignee_role === 'ai'
+      ? `ai:${r.assignee_id}${r.assignee_model ? ` (${r.assignee_model})` : ''}`
+      : 'user';
+    return `${who} 于 ${r.claimed_at} 认领`;
+  }
+
+  /**
+   * 认领工单（契约 3.2.1）。
+   * - 未被认领 / 已过期 → 写入四列（过期接管时 took_over=true）
+   * - 同一 actor（id+role）→ 幂等，只刷新 claimed_at
+   * - 已被他人认领且未过期 → 409 TICKET_CLAIMED（信息带认领者 id/role/model 与时间）
+   * @returns {{ticket:object, took_over:boolean}}
+   */
+  function claim(idOrRef, actor) {
+    const row = requireRawRow(idOrRef);
+    const holder = activeHolder(row);
+    let tookOver = false;
+
+    if (holder) {
+      if (!isSameActor(holder, actor)) {
+        throw new HttpError(
+          409,
+          'TICKET_CLAIMED',
+          `工单已被 ${claimHolderText(row)}，你（${actor.role}:${actor.id}）无法认领。` +
+            '如需接管，请先让认领者释放，或等待认领过期。',
+        );
+      }
+      // 同一 actor：幂等，只刷新 claimed_at（仍走下面的 UPDATE）
+    } else if (row.assignee_id) {
+      // 有认领但已过期 → 接管
+      tookOver = true;
+    }
+
+    const now = nowIso();
+    db.prepare(
+      `UPDATE tickets SET assignee_id = ?, assignee_role = ?, assignee_model = ?, claimed_at = ?, updated_at = ?
+        WHERE id = ?`,
+    ).run(actor.id, actor.role, actor.model ?? null, now, now, row.id);
+
+    const updated = requireTicket(row.id);
+    return { ticket: updated, took_over: tookOver };
+  }
+
+  /**
+   * 释放认领（契约 3.2.1）。
+   * - 未被认领 / 已过期 → 幂等 200（无四列可清）
+   * - 认领者本人（id+role）→ 释放，四列置 NULL
+   * - 调用者 role=user → 可释放任何人的认领（用户是老板）
+   * - 其它 AI 且未过期 → 409 TICKET_CLAIMED
+   */
+  function release(idOrRef, actor) {
+    const row = requireRawRow(idOrRef);
+    const holder = activeHolder(row);
+
+    if (!holder) return requireTicket(row.id); // 幂等：本就没被有效认领
+
+    if (isSameActor(holder, actor) || actor.role === 'user') {
+      db.prepare(
+        `UPDATE tickets SET assignee_id = NULL, assignee_role = NULL, assignee_model = NULL,
+          claimed_at = NULL, updated_at = ? WHERE id = ?`,
+      ).run(nowIso(), row.id);
+      return requireTicket(row.id);
+    }
+
+    // 其它 AI 且未过期
+    throw new HttpError(
+      409,
+      'TICKET_CLAIMED',
+      `工单由 ${claimHolderText(row)}，只有认领者本人或用户（role=user）可释放。`,
+    );
+  }
+
+  /**
+   * 写操作保护（契约 1.6 第 6 条）：已认领且调用者不是认领者时，PATCH / comment_add → 409。
+   * 删除工单不在保护范围（契约 1.6 第 7 条：用户的清理动作不能被卡）。
+   * 例外：role=user 永远可覆盖。惰性过期：过期认领视为未认领，放行。
+   * @throws {HttpError} 409 TICKET_CLAIMED
+   */
+  function assertWritable(idOrRef, actor) {
+    const row = requireRawRow(idOrRef);
+    const holder = activeHolder(row);
+    if (!holder) return;
+    if (isSameActor(holder, actor) || actor.role === 'user') return;
+    throw new HttpError(
+      409,
+      'TICKET_CLAIMED',
+      `工单已被 ${claimHolderText(row)}，你（${actor.role}:${actor.id}）不能修改或评论；` +
+        '认领者本人或用户（role=user）可操作。',
+    );
+  }
+
+  return { list, get, create, update, remove, claim, release, assertWritable, findByIdOrRef, requireWorkspace, requireTicket, countAll };
 }

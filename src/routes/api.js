@@ -68,14 +68,29 @@ export function createApiRouter(ctx) {
 
   r.patch('/tickets/:id', (req, res) => {
     const actor = actorOf(req);
+    tickets.assertWritable(req.params.id, actor); // 契约 1.6 第 6 条：被他人认领且未过期 → 409（user 例外）
     const t = tickets.update(req.params.id, req.body || {}, actor);
     res.json(tickets.get(t.id));
   });
 
   r.delete('/tickets/:id', (req, res) => {
-    actorOf(req);
+    const actor = actorOf(req);
     const { ref } = tickets.remove(req.params.id);
     res.json({ deleted: true, ref });
+  });
+
+  // 认领（锁定）：契约 1.6 / 3.2.1
+  r.post('/tickets/:id/claim', (req, res) => {
+    const actor = actorOf(req);
+    const result = tickets.claim(req.params.id, actor);
+    res.status(200).json(result.took_over ? { ...result.ticket, took_over: true } : result.ticket);
+  });
+
+  // 释放认领：契约 1.6 / 3.2.1
+  r.post('/tickets/:id/release', (req, res) => {
+    const actor = actorOf(req);
+    const ticket = tickets.release(req.params.id, actor);
+    res.status(200).json(ticket);
   });
 
   // ---------- 评论 ----------
@@ -89,6 +104,7 @@ export function createApiRouter(ctx) {
   r.post('/tickets/:id/comments', (req, res) => {
     const actor = actorOf(req);
     const ticketId = ticketIdOf(req.params.id);
+    tickets.assertWritable(ticketId, actor); // 契约 1.6 第 6 条：被他人认领且未过期 → 409（user 例外）
     const c = comments.create(ticketId, req.body || {}, actor);
     // 契约 5.5.2 的提醒本来是给纯文本视图的，但 AI 也可能走 REST 写评论，
     // 这里额外回一个 status_hint 字段（前端忽略未知字段），让两条路的软约束一致。
