@@ -27,3 +27,9 @@ Thumbs.db
 
 # 内部 QA 笔记
 tests/FINDINGS.md
+
+# 本地临时笔记：禁止入库
+docs/note/
+
+# npm pack 产物
+*.tgz

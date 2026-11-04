@@ -80,7 +80,12 @@ test('中文 slug：未编码、URL 编码、.txt 后缀、?format=text 四种�
     const root = await reqText(app.base, '/', { Accept: 'text/plain' });
     assert.ok(root.text.includes(CN_SLUG), '工作区索引必须列出中文 slug');
     assert.ok(root.text.includes(CN_DIR), '工作区索引必须列出中文路径');
-    assert.ok(root.text.includes(`    list: /${CN_SLUG}/list`), '索引里给出的 list URL 必须能直接拿去用');
+    // 契约 4.2 改版：索引里的 list 行给完整 URL（带 host），AI 拿到就能直接 fetch
+    assert.match(
+      root.text,
+      new RegExp(`    list: https?://[^/]+/${CN_SLUG}/list\\.txt`),
+      '索引里给出的 list URL 必须是带 host 的完整地址，且能直接拿去用',
+    );
 
     // 8) MCP 侧用中文 slug 也要能查到
     const mcpRes = await fetch(app.base + '/mcp', {

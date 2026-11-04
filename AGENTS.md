@@ -80,3 +80,21 @@ npm run dev               # 同上，改代码自动重启
 npm test                  # node:test 用例
 npm run smoke             # 端到端冒烟
 ```
+
+---
+
+## 端口纪律（血的教训，2026-11-04）
+
+`47321` 只属于真实实例，数据库必须是 `data/ticket.db`。
+
+事故经过：有人用 `DB_PATH=/tmp/ci_dsh/ticket.db PORT=47321` 起了自测实例，把用户真实服务挤掉约 10 分钟，
+网页上 26 张工单全部消失（数据没丢，只是连错了库）。同类事故当天发生两次（`/tmp/ci_dsh`、`/tmp/rt`）。
+
+规矩：
+
+1. 自测一律用**随机端口 + 临时 db**（`PORT=0` 或自己挑 5 位端口，`DB_PATH=$(mktemp -d)/t.db`）。
+2. 绑定端口前先检查是否被占：`lsof -nP -iTCP:<port> -sTCP:LISTEN`。
+3. **禁止** `pkill -f "node src/server.js"` —— 会杀掉真实服务。停进程用 pid 文件或精确 pid。
+4. 真实服务的启停只用 `bash scripts/ticket.sh {start|stop|restart|status}`（有 pid 文件管理）。
+5. 每次自测收尾都要核一遍：`curl -s localhost:47321/healthz` 里的 `db` 必须是
+   `<项目根>/data/ticket.db`。

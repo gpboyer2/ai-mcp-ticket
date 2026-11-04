@@ -6,6 +6,18 @@ import { parseStatusFilter } from './repo/workspaces.js';
 import { HttpError } from './actor.js';
 
 /**
+ * 从请求还原 baseUrl（如 http://192.168.1.10:47321）。
+ * 用 Host 头而不是写死 localhost：AI 从局域网访问时该拿到局域网地址，
+ * 否则它把 localhost 贴到另一台机器上就访问不到。协议优先信 X-Forwarded-Proto。
+ */
+export function baseUrlOf(req) {
+  const host = req.get?.('host') || req.headers?.host || '';
+  if (!host) return '';
+  const proto = String(req.get?.('x-forwarded-proto') || req.protocol || 'http').split(',')[0].trim();
+  return `${proto}://${host}`;
+}
+
+/**
  * 查询参数转数字。空值 → undefined（用默认）；非数字 → 400，
  * 不让 NaN 流进 SQL（NaN 会被绑定成 NULL，撞 NOT NULL 约束后变成 500）。
  */

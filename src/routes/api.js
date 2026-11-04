@@ -2,7 +2,7 @@
 import express from 'express';
 import { resolveActor, HttpError } from '../actor.js';
 import { syncWorkspaces } from '../workspace-sync.js';
-import { listTextView } from '../views.js';
+import { listTextView, baseUrlOf } from '../views.js';
 import { statusHint } from '../render/text.js';
 
 export function createApiRouter(ctx) {
@@ -33,7 +33,7 @@ export function createApiRouter(ctx) {
     if (!ws) throw new HttpError(404, 'WORKSPACE_NOT_FOUND', `工作区不存在: ${req.params.ws}`);
     res.type('text/plain; charset=utf-8');
     res.set('Vary', 'Accept');
-    res.send(listTextView(ctx, ws, req.query));
+    res.send(listTextView(ctx, ws, req.query, { baseUrl: baseUrlOf(req) }));
   });
 
   // ---------- 工单 ----------

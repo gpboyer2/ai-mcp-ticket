@@ -241,6 +241,26 @@
     setTimeout(function () { el.remove(); }, kind === 'error' ? 3600 : 2200);
   }
 
+  // 带一个操作按钮的 toast（#58：创建成功后给「复制工单 AI URL」）
+  // getText 是函数，点了才取值（因为地址可能要等数据回来才有）
+  function toastWithAction(msg, kind, actionLabel, getText) {
+    const el = document.createElement('div');
+    el.className = 'toast toast-action' + (kind ? ' ' + kind : '');
+    el.innerHTML = '<span class="toast-msg">' + esc(msg) + '</span>' +
+      '<button type="button" class="toast-btn">' + window.icon('copy', 12) + '<span>' +
+      esc(actionLabel) + '</span></button>';
+    toastRoot().appendChild(el);
+    el.querySelector('.toast-btn').addEventListener('click', async function () {
+      const text = typeof getText === 'function' ? getText() : String(getText || '');
+      const ok = await copyText(text);
+      toast(ok ? '已复制：' + text : '复制失败，请手动复制：' + text, ok ? 'ok' : 'error');
+      el.remove();
+    });
+    // 有操作按钮的 toast 停留久一点，给用户时间点
+    setTimeout(function () { el.remove(); }, 9000);
+    return el;
+  }
+
   /* ---------------- 弹窗 ----------------
      #46（用户 ai-剧本#46）：点弹窗外、按 ESC 都**不关闭**，必须显式点「取消」/「×」/「保存」。
      理由：用户写长正文时手滑点到外面就丢内容，代价太大。
@@ -612,7 +632,8 @@
     statusBadge: statusBadge, statusDot: statusDot, depsList: depsList,
     actorText: actorText, truncate: truncate, debounce: debounce, lastComment: lastComment,
     splitMerged: splitMerged, joinMerged: joinMerged,
-    toast: toast, openModal: openModal, confirmDialog: confirmDialog,
+    toast: toast, toastWithAction: toastWithAction,
+    openModal: openModal, confirmDialog: confirmDialog,
     openMenu: openMenu, closeMenus: closeMenus,
     openAiDrawer: openAiDrawer,
     textUrlFor: textUrlFor,

@@ -9,7 +9,7 @@
   'use strict';
   const T = window.TT;
 
-  function formHtml(t) {
+  function formHtml(t, ws) {
     const v = t || {};
     const status = v.status || 'open';
     const priority = v.priority == null ? 1 : Number(v.priority);
@@ -44,7 +44,16 @@
       '<div class="field">' +
         '<label>依赖的工单（可搜索、可多选）</label>' +
         '<div id="deps-mount"></div>' +
-      '</div>';
+      '</div>' +
+      // #58：编辑已有工单时，直接给这张工单的 AI 纯文本 URL
+      (t && t.seq ? '<div class="field">' +
+        '<label>这张工单的 AI 纯文本地址</label>' +
+        '<div class="ai-url-row">' +
+          '<code class="ai-url-inline" id="editor-ai-url">' + T.esc(T.ticketTextUrl(ws, t.seq)) + '</code>' +
+          '<button class="btn sm" id="editor-copy-ai" type="button">' +
+            window.icon('copy', 13) + '<span>复制</span></button>' +
+        '</div>' +
+      '</div>' : '');
   }
 
   // 给弹窗里的合并输入框挂上图片能力（粘贴/拖入/点选）
@@ -62,6 +71,18 @@
         file.value = '';
       });
     }
+  }
+
+  // 绑定编辑弹窗里的「复制 AI URL」
+  function bindCopyAiUrl(modal) {
+    const btn = modal.querySelector('#editor-copy-ai');
+    const code = modal.querySelector('#editor-ai-url');
+    if (!btn || !code) return;
+    btn.addEventListener('click', async function () {
+      const url = code.textContent.trim();
+      const ok = await T.copyText(url);
+      T.toast(ok ? '已复制：' + url : '复制失败，请手动复制', ok ? 'ok' : 'error');
+    });
   }
 
   function readForm(modal, picker) {
@@ -82,7 +103,7 @@
     let picker = null;
     T.openModal({
       title: '新建工单',
-      bodyHtml: formHtml(null),
+      bodyHtml: formHtml(null, ws),
       okText: '创建',
       onMount: function (modal) {
         picker = window.DepsPicker.mount(modal.querySelector('#deps-mount'), { workspace: ws, value: '' });
@@ -91,7 +112,17 @@
       onOk: async function (modal) {
         const payload = readForm(modal, picker);
         const created = await T.API.createTicket(ws, payload);
-        T.toast('已创建 ' + (created && created.ref ? created.ref : '工单'), 'ok');
+        // #58：新建时还没有 seq，所以复制按钮放在「创建成功」的反馈里
+        if (created && created.seq) {
+          T.toastWithAction(
+            '已创建 ' + (created.ref || '工单'),
+            'ok',
+            '复制工单 AI URL',
+            function () { return T.ticketTextUrl(ws, created.seq); }
+          );
+        } else {
+          T.toast('已创建 ' + (created && created.ref ? created.ref : '工单'), 'ok');
+        }
         if (onDone) onDone(created);
       }
     });
@@ -102,7 +133,7 @@
     let picker = null;
     T.openModal({
       title: '编辑 ' + (t.ref || '工单'),
-      bodyHtml: formHtml(t),
+      bodyHtml: formHtml(t, ws),
       okText: '保存',
       onMount: function (modal) {
         picker = window.DepsPicker.mount(modal.querySelector('#deps-mount'), {
@@ -111,6 +142,7 @@
           exclude: [t.ref] // 不能依赖自己
         });
         mountImageUpload(modal);
+        bindCopyAiUrl(modal);
       },
       onOk: async function (modal) {
         const payload = readForm(modal, picker);

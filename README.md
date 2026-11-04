@@ -4,6 +4,7 @@
 
 单进程、单文件 SQLite，无 Docker、无 Postgres、无构建步骤。`npm start` 就有看板 + REST + MCP 三套接口，人和 AI 读写同一份数据。
 
+[![CI](https://github.com/gpboyer2/ai-mcp-ticket/actions/workflows/ci.yml/badge.svg)](https://github.com/gpboyer2/ai-mcp-ticket/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](https://nodejs.org)
 [![MCP](https://img.shields.io/badge/MCP-10%20tools-blueviolet)](docs/CONTRACT.md)

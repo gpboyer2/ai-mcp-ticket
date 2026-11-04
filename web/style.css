@@ -750,24 +750,9 @@ html[data-theme="dark"] .deps-list { box-shadow: 0 12px 32px rgba(0, 0, 0, .5), 
 .cmt-body .md-img { max-height: 420px; object-fit: contain; object-position: left top; }
 .cmt-body .md-img { cursor: zoom-in; }
 
-/* 图片放大预览（点评论里的图） */
-.img-lightbox {
-  position: fixed;
-  inset: 0;
-  z-index: 500;
-  background: rgba(8, 10, 14, .86);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 28px;
-  cursor: zoom-out;
-}
-.img-lightbox img {
-  max-width: 100%;
-  max-height: 100%;
-  border-radius: var(--radius);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, .5);
-}
+/* #59：点图片开新标签页，用 cursor + 角标给出视觉暗示 */
+.md-img { cursor: zoom-in; position: relative; }
+.md-img:hover { border-color: var(--accent); filter: brightness(1.02); }
 
 /* 上传提示条 */
 .img-hint {
@@ -885,3 +870,139 @@ html[data-theme="dark"] .deps-list { box-shadow: 0 12px 32px rgba(0, 0, 0, .5), 
 }
 
 .ai-actions { display: flex; gap: 8px; margin-top: 14px; }
+
+/* ==========================================================================
+   工单详情（#54 统一美化 + #13 去掉标题概念）
+   两段式：元信息条 + 内容（正文 → 分隔线 → 评论）
+   ========================================================================== */
+
+/* ① 元信息条：一行 chip，统一间距、统一高度 */
+.meta-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 2px 0 10px;
+}
+.meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: var(--h-sm);
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  color: var(--muted);
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.meta-chip .ic { flex: 0 0 auto; opacity: .85; }
+.meta-chip.meta-status { padding-left: 7px; }
+/* 状态 chip 里的徽标不要再套一层背景 */
+.meta-chip .status-badge { font-size: 11.5px; }
+
+/* ② 操作工具栏：右对齐一组，不再散落 */
+.detail-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 8px 0 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 14px;
+}
+.detail-toolbar .spacer { flex: 1 1 auto; }
+.detail-toolbar .select { width: auto; min-width: 84px; }
+.dt-ref {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+  user-select: all;
+}
+
+/* ③ 内容区：没有「正文」标题，直接是内容 */
+.content-block { margin-bottom: 18px; }
+.content-block .body-text {
+  font-size: 13px;
+  line-height: 1.72;
+}
+.content-empty { color: var(--muted); font-family: var(--font); font-size: 12.5px; }
+
+/* ④ 评论区分隔：分组标题 + 分隔线，跟正文拉开呼吸感 */
+.comments-block { margin-top: 4px; }
+.section-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 11px;
+}
+.section-divider::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--border);
+}
+.section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.cmt-compose { margin-top: 11px; }
+
+/* 评论卡片与看板卡片同一套圆角/阴影语言 */
+.cmt {
+  border-radius: var(--radius-sm);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, .04);
+}
+
+/* 带操作按钮的 toast（#58） */
+.toast-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: var(--radius);
+  padding: 7px 10px 7px 14px;
+  pointer-events: auto;
+}
+.toast-msg { font-size: 12.5px; }
+.toast-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: var(--h-sm);
+  padding: 0 10px;
+  font-family: inherit;
+  font-size: 12px;
+  color: #fff;
+  background: rgba(255, 255, 255, .18);
+  border: 1px solid rgba(255, 255, 255, .3);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.toast-btn:hover { background: rgba(255, 255, 255, .3); }
+
+/* 编辑弹窗里的 AI URL 行（#58） */
+.ai-url-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ai-url-inline {
+  flex: 1 1 auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  word-break: break-all;
+  user-select: all;
+}
+.ai-url-row .btn { flex: 0 0 auto; }

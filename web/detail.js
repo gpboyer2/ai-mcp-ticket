@@ -242,23 +242,15 @@
       }
     });
 
-    document.getElementById('d-title').addEventListener('click', function () {
-      T.openModal({
-        title: '修改标题',
-        bodyHtml: '<div class="field"><label>标题</label><input class="input" name="title" maxlength="200" value="' +
-          T.esc(ticket.title) + '"></div>',
-        okText: '保存',
-        onOk: async function (modal) {
-          const v = modal.querySelector('[name="title"]').value.trim();
-          if (!v) throw new Error('标题不能为空');
-          const updated = await T.API.patchTicket(ticket.id, { title: v });
-          Object.assign(ticket, updated || {});
-          document.getElementById('d-title').textContent = ticket.title;
-          T.toast('标题已更新', 'ok');
-          T.emit('board:reload');
-        }
+    // #58：复制这张工单的 AI 纯文本 URL
+    const copyAiBtn = document.getElementById('d-copy-ai');
+    if (copyAiBtn) {
+      copyAiBtn.addEventListener('click', async function () {
+        const url = T.ticketTextUrl(S.ws, ticket.seq);
+        const ok = await T.copyText(url);
+        T.toast(ok ? '已复制工单 AI URL：' + url : '复制失败，请手动复制：' + url, ok ? 'ok' : 'error');
       });
-    });
+    }
 
     document.getElementById('d-edit').addEventListener('click', function () {
       window.Editor.openEdit(ticket, S.ws, function () {
@@ -281,12 +273,13 @@
       }
     });
 
-    // 点图片放大预览
+    // #59：点图片直接在新标签页打开图片地址（不再用蒙版放大）
+    // 注意：不 preventDefault，保留右键「另存为」等原生行为
     body.addEventListener('click', function (e) {
       const img = e.target.closest && e.target.closest('.md-img');
       if (!img) return;
-      e.preventDefault();
-      openLightbox(img.getAttribute('src'), img.getAttribute('alt'));
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; // 交给浏览器处理
+      window.open(img.getAttribute('src'), '_blank', 'noopener');
     });
 
     // 依赖链接：在右栏打开被依赖的工单（不跳转）
@@ -407,21 +400,6 @@
     input.addEventListener('keydown', function (e) {
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); send(); }
     });
-  }
-
-  // 图片放大预览（点空白或 Esc 关闭；这是看图不是弹窗，Esc 关掉合理）
-  function openLightbox(src, alt) {
-    const box = document.createElement('div');
-    box.className = 'img-lightbox';
-    box.innerHTML = '<img src="' + T.esc(src) + '" alt="' + T.esc(alt || '') + '">';
-    function close() {
-      box.remove();
-      document.removeEventListener('keydown', onKey);
-    }
-    function onKey(e) { if (e.key === 'Escape') close(); }
-    box.addEventListener('click', close);
-    document.addEventListener('keydown', onKey);
-    document.body.appendChild(box);
   }
 
   /* ---------------- 加载 ---------------- */

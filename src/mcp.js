@@ -5,7 +5,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { z } from 'zod';
 import { actorFromArgs, HttpError } from './actor.js';
 import { renderCommentList, renderWorkspaceIndex, DEFAULT_MAXLEN } from './render/text.js';
-import { listTextView, ticketTextView } from './views.js';
+import { listTextView, ticketTextView, baseUrlOf } from './views.js';
 import { STATUSES } from './repo/workspaces.js';
 
 const ok = (text) => ({ content: [{ type: 'text', text }] });
@@ -30,7 +30,7 @@ const actorFields = {
 const READ = { readOnlyHint: true, openWorldHint: false };
 const WRITE = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
 
-export function buildMcpServer(ctx) {
+export function buildMcpServer(ctx, { baseUrl = '' } = {}) {
   const { workspaces, tickets, comments, actors } = ctx;
   const server = new McpServer({ name: 'ticket', version: '1.0.0' });
 
@@ -44,12 +44,12 @@ export function buildMcpServer(ctx) {
     listTextView(ctx, ws, {
       ...args,
       maxlen: args.maxlen === undefined ? DEFAULT_MAXLEN : args.maxlen,
-    });
+    }, { baseUrl });
 
   const renderOne = (idOrRef, writeEvent) => {
     const t = tickets.findByIdOrRef(idOrRef);
     if (!t) throw new HttpError(404, 'TICKET_NOT_FOUND', `工单不存在: ${idOrRef}`);
-    return ticketTextView(ctx, workspaces.find(t.workspace_id), t, { writeEvent });
+    return ticketTextView(ctx, workspaces.find(t.workspace_id), t, { writeEvent, baseUrl });
   };
 
   // 写工具：actor 固定 role=ai，参数里必须自带 id/model
@@ -70,7 +70,12 @@ export function buildMcpServer(ctx) {
     },
     async ({ include_archived }) => {
       try {
-        return ok(renderWorkspaceIndex({ workspaces: workspaces.list({ includeArchived: !!include_archived }) }));
+        return ok(
+          renderWorkspaceIndex({
+            workspaces: workspaces.list({ includeArchived: !!include_archived }),
+            baseUrl,
+          }),
+        );
       } catch (e) {
         return fail(e);
       }
@@ -303,7 +308,9 @@ export function buildMcpServer(ctx) {
 /** POST /mcp：每请求一套 server+transport（无状态） */
 export function createMcpPostHandler(ctx) {
   return async (req, res) => {
-    const server = buildMcpServer(ctx);
+    // MCP 是无状态的（每请求新建 server），所以能拿到本次请求的 Host：
+    // AI 通过局域网 IP 连过来时，文本里给的 URL 也就是那个 IP。
+    const server = buildMcpServer(ctx, { baseUrl: baseUrlOf(req) });
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,

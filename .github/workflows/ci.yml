@@ -1,0 +1,40 @@
+name: CI
+
+# 为什么要有这个：README 上挂着 CI badge，没有 CI 那个 badge 就是空口无凭。
+# 触发面覆盖默认分支 dev 与开发分支 feat-v1.0，外加所有 PR —— 任何一条进来都要过测试。
+
+on:
+  push:
+    branches: [dev, feat-v1.0]
+  pull_request:
+    branches: [dev, feat-v1.0]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: test (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # engines 要求 >=22；22 是下限（必须验），24 是当前 LTS 线（防未来踩坑）。
+        node: [22, 24]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      # 用 npm ci 而不是 npm install：锁文件怎么写的就怎么装，CI 里不允许悄悄改依赖树。
+      # better-sqlite3 自带 8 个平台的 prebuild，linux-x64 在其列，所以这里不需要编译工具链。
+      - name: Install
+        run: npm ci
+
+      # 测试全部用 node:test，每个测试文件自己 listen(0) 拿随机端口、自己建临时目录与临时库，
+      # 互不干扰，也不占用任何固定端口 —— 所以这里不需要起服务、不需要配 DSH_HOME。
+      - name: Test
+        run: npm test

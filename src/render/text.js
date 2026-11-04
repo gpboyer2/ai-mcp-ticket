@@ -79,10 +79,10 @@ export function renderTicketList({
   baseUrl = '',
 }) {
   const lines = [`# ai-mcp-ticket  workspace: ${workspace.slug}  path: ${workspace.path}`];
-  // 只有真带了 status 才输出 status 部分：没过滤时写 status=all 对 AI 是噪音
-  const filter = [`count: ${tickets.length}`, `generated: ${generatedAt}`];
-  if (statuses && statuses.length) filter.unshift(`status=${statuses.join(',')}`);
-  lines.push(`# filter: ${filter.join('  ')}`);
+  // 没带 status 时连 `filter:` 标签一起去掉：`# filter: count: 2` 双冒号读起来像笔误，
+  // 而且"没有过滤"这件事本身不需要占一个词。
+  const tail = `count: ${tickets.length}  generated: ${generatedAt}`;
+  lines.push(statuses && statuses.length ? `# filter: status=${statuses.join(',')}  ${tail}` : `# ${tail}`);
   lines.push(`# 提示: ${listHint(workspace.slug, baseUrl)}`);
   lines.push('');
 

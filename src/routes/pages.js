@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { HttpError } from '../actor.js';
 import { renderWorkspaceIndex, renderNotFound } from '../render/text.js';
-import { listTextView, ticketTextView } from '../views.js';
+import { listTextView, ticketTextView, baseUrlOf } from '../views.js';
 
 const WEB_DIR = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', '..', 'web');
 
@@ -73,6 +73,7 @@ export function createPagesRouter(ctx) {
       res,
       renderWorkspaceIndex({
         workspaces: workspaces.list({ includeArchived: String(req.query.include_archived || '') === '1' }),
+        baseUrl: baseUrlOf(req),
       }),
     );
   });
@@ -82,7 +83,7 @@ export function createPagesRouter(ctx) {
   const sendListText = (req, res) => {
     const ws = requireWs(req.params.ws);
     if (!wantsText(req)) return sendHtml(req, res);
-    sendText(res, listTextView(ctx, ws, req.query));
+    sendText(res, listTextView(ctx, ws, req.query, { baseUrl: baseUrlOf(req) }));
   };
   r.get('/:ws/list', sendListText);
   r.get('/:ws/list.txt', sendListText);
@@ -102,7 +103,7 @@ export function createPagesRouter(ctx) {
       throw new HttpError(404, 'TICKET_NOT_FOUND', `工单不存在: ${ws.slug}#${seq}`);
     }
     if (!wantsText(req)) return sendHtml(req, res);
-    sendText(res, ticketTextView(ctx, ws, t));
+    sendText(res, ticketTextView(ctx, ws, t, { baseUrl: baseUrlOf(req) }));
   });
 
   // 页面路由自己的错误出口：纯文本请求要拿到 text/plain 的说明（AI 读不了 HTML 错误页）。
