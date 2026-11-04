@@ -25,8 +25,7 @@
 
 | 想干的事 | 树里已登记的位置 | 不许出现的写法（举例，不限于此） |
 | --- | --- | --- |
-| 存页面截图 | `docs/screenshots/` | `screenshot/` `shots/` `captures/` `snapshots/` `pics/` `photo/` `img/` `png/` |
-| 存文档配图 | `docs/` | `docs/images/` `docs/pic/` `docs/figures/` `doc-assets/` |
+| 截图、图片目录 | `docs/screenshots/` | `screenshot/` `shots/` `captures/` `snapshots/` `pics/` `photo/` `img/` `png/` `docs/images/` `docs/assets/` `docs/figures/` |
 | 放数据层代码 | `src/repo/` | `src/models/` `src/dao/` `src/db/` `src/store/` |
 | 放 HTTP 路由 | `src/routes/` | `src/api/` `src/controllers/` `src/handlers/` `src/endpoints/` |
 | 放纯文本渲染 | `src/render/` | `src/text/` `src/formatter/` `src/format/` `src/plain/` |
@@ -94,10 +93,9 @@ ai-mcp-ticket/
 ├── docs/                        项目级文档
 │   ├── agents/                  给 AI 会话看的规则子文档
 │   │   └── LAYOUT.md            本文件：目录地图 + 文件命名 + 新建目录的硬流程（唯一权威）
-│   ├── screenshots/             验收截图。全仓库唯一的截图目录
+│   ├── screenshots/             截图、图片目录
 │   ├── CONTRACT.md              接口契约（v1，冻结）：领域模型 / 接口形状 / 口径
-│   ├── research.md              调研笔记
-│   └── plain-text.png           纯文本视图示意
+│   └── research.md              调研笔记
 │
 └── data/                        运行期数据，整目录 gitignore，不许入库
     ├── ticket.db                SQLite 主库（含 -wal / -shm）
@@ -116,7 +114,7 @@ ai-mcp-ticket/
 2. 同一个东西尽量别出现"第二版文件名"：`AGENTS-v2.md` `README-new.md` `xxx-final.md` `xxx-最终版.md` `xxx-副本.md` ，要改最好直接改原文件（git 有历史）。
 3. 文档正文放 `docs/`，不许散落在根目录和代码目录里。
 4. 临时文件不许落在仓库任何位置；`data/` 里的东西不入库，也别把 `data/` 里的文件路径写进文档或代码。
-5. 图片只许放在 `docs/screenshots/` 与 `docs/` 两处，根据类型分别存放，放在别处一律算违规。
+5. 图片只许放在 `docs/screenshots/` 一处，放在别处一律算违规。
 
 ### 新建目录 / 新建文件的硬流程
 

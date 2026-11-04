@@ -47,6 +47,19 @@ function commentsBlock(comments, { comments: commentLimit, indent = '    ' }) {
 }
 
 /**
+ * 列表提示行（契约 4.2）。给完整 URL 而不是相对路径：AI 拿到 host 之外的文本时
+ * 还得猜域名端口，猜错就白跑一趟。host 由调用方从请求里取（局域网访问时就是局域网地址）。
+ * baseUrl 为空（MCP 无 HTTP 上下文）时退化为相对路径，总比给个错的 host 强。
+ */
+function listHint(slug, baseUrl) {
+  const base = baseUrl ? baseUrl.replace(/\/+$/, '') : '';
+  return (
+    `读 ${base}/${slug}/list.txt?status=open,in_progress,reopened 拿最新；` +
+    `写评论用 POST ${base}/api/tickets/{id}/comments，需带 X-Actor-Id/X-Actor-Role/X-Actor-Model`
+  );
+}
+
+/**
  * 列表纯文本（契约 4.2）
  * @param {object} p
  * @param {object} p.workspace   {slug,title,path}
@@ -63,14 +76,15 @@ export function renderTicketList({
   maxlen = DEFAULT_MAXLEN,
   comments,
   generatedAt = new Date().toISOString(),
+  baseUrl = '',
 }) {
-  const filterText = statuses && statuses.length ? statuses.join(',') : 'all';
-  const lines = [
-    `# ai-mcp-ticket  workspace: ${workspace.slug}  path: ${workspace.path}`,
-    `# filter: status=${filterText}  count: ${tickets.length}  generated: ${generatedAt}`,
-    `# 提示: 读 /${workspace.slug}/list?status=... 拿最新；写评论用 POST /api/tickets/{id}/comments，需带 X-Actor-Id/X-Actor-Role/X-Actor-Model`,
-    '',
-  ];
+  const lines = [`# ai-mcp-ticket  workspace: ${workspace.slug}  path: ${workspace.path}`];
+  // 只有真带了 status 才输出 status 部分：没过滤时写 status=all 对 AI 是噪音
+  const filter = [`count: ${tickets.length}`, `generated: ${generatedAt}`];
+  if (statuses && statuses.length) filter.unshift(`status=${statuses.join(',')}`);
+  lines.push(`# filter: ${filter.join('  ')}`);
+  lines.push(`# 提示: ${listHint(workspace.slug, baseUrl)}`);
+  lines.push('');
 
   tickets.forEach((t, i) => {
     const prio = PRIORITY_LABEL[t.priority] ?? String(t.priority);
@@ -133,7 +147,7 @@ export function statusHint({ status, event, body = '', actorRole = 'ai' } = {}) 
 }
 
 /** 单张工单纯文本（契约 4.3） */
-export function renderTicket(ticket, { maxlen = 0, workspace, hint = null } = {}) {
+export function renderTicket(ticket, { maxlen = 0, workspace, hint = null, baseUrl = '' } = {}) {
   const ws = workspace || { slug: ticket.workspace_slug, path: ticket.workspace_path };
   const prio = PRIORITY_LABEL[ticket.priority] ?? String(ticket.priority);
   const lines = [
@@ -163,16 +177,22 @@ export function renderTicket(ticket, { maxlen = 0, workspace, hint = null } = {}
 
   // 提醒行放在 # end. 之前，同一个 # 前缀，保持纯文本一致性
   if (hint) lines.push('', hint);
-  lines.push('', '# end. 写评论用 POST /api/tickets/{id}/comments，需带 X-Actor-Id/X-Actor-Role/X-Actor-Model');
+  const base = baseUrl ? baseUrl.replace(/\/+$/, '') : '';
+  lines.push(
+    '',
+    `# end. 写评论用 POST ${base}/api/tickets/${ticket.id}/comments，需带 X-Actor-Id/X-Actor-Role/X-Actor-Model`,
+  );
   return lines.join('\n') + '\n';
 }
 
 /** 工作区索引纯文本（`GET /` 的 text 形态） */
-export function renderWorkspaceIndex({ workspaces, generatedAt = new Date().toISOString() }) {
+export function renderWorkspaceIndex({ workspaces, generatedAt = new Date().toISOString(), baseUrl = '' }) {
+  const base = baseUrl ? baseUrl.replace(/\/+$/, '') : '';
   const lines = [
     '# ai-mcp-ticket 工作区索引',
     `# count: ${workspaces.length}  generated: ${generatedAt}`,
-    '# 提示: 读 /{ws}/list?status=open 看某工作区工单；全部纯文本 URL 见 docs/CONTRACT.md 第 4 节',
+    // 不引用 docs：开源用户装完 MCP 手里没有我们的文档，指过去是废话还费 token
+    `# 提示: 读 ${base}/{ws}/list.txt 看某工作区工单；status 可选 open,in_progress,reopened,done,cancelled`,
     '',
   ];
   workspaces.forEach((w, i) => {
@@ -182,7 +202,7 @@ export function renderWorkspaceIndex({ workspaces, generatedAt = new Date().toIS
     lines.push(
       `    tickets: 打开 ${c.open || 0} / 处理中 ${c.in_progress || 0} / 重新打开 ${c.reopened || 0} / 已完成 ${c.done || 0} / 已取消 ${c.cancelled || 0}  共 ${c.total || 0}`,
     );
-    lines.push(`    list: /${w.slug}/list`);
+    lines.push(`    list: ${base}/${w.slug}/list.txt`);
     lines.push('');
   });
   lines.push('# end. 用 ?status= 过滤，?format=text 强制纯文本');

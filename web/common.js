@@ -353,7 +353,15 @@
   });
   document.addEventListener('scroll', closeMenus, true);
 
-  /* ---------------- AI 视角抽屉 ---------------- */
+  /* ---------------- AI 视角抽屉（#53） ----------------
+     用户要求（原话要点）：
+       · 本项目是开源的，陌生用户装好 MCP 后**没有我们的 docs**，所以文案里绝不能提 docs/CONTRACT.md
+       · URL 必须带完整 host（动态取 location.origin），不能只给 /xxx/list 这种半截路径
+       · status 不能只写 open，要把 in_progress,reopened 一起写出来
+       · 站在「全新、陌生的 AI 和用户」的视角 —— 贴过去就能用，不用再问人
+     ------------------------------------------------------------------ */
+
+  // 保持向前兼容 textUrlFor 契约
   function textUrlFor(pathname, search, useLanHint) {
     const params = new URLSearchParams(search || '');
     params.set('format', 'text');
@@ -366,48 +374,150 @@
     return window.location.protocol + '//' + host + pathname + (qs ? '?' + qs : '');
   }
 
+  // 站内绝对地址：origin + 路径（origin 动态取，局域网访问时自然是局域网 IP）
+  function absUrl(pathname, search) {
+    const p = pathname || '/';
+    const s = search || '';
+    return window.location.origin + p + s;
+  }
+
+  // 某工作区的「进行中」工单纯文本 URL（#53：三个状态都要写全）
+  function wsTextUrl(slug) {
+    return absUrl('/' + encodeURIComponent(slug) + '/list.txt') + '?status=open,in_progress,reopened';
+  }
+  // 单张工单纯文本 URL
+  function ticketTextUrl(slug, seq) {
+    return absUrl('/' + encodeURIComponent(slug) + '/t/' + seq + '.txt');
+  }
+  // 工作区索引纯文本 URL
+  function indexTextUrl() {
+    return absUrl('/') + '?format=text';
+  }
+
+  // 一条「URL + 说明 + 复制按钮」的卡片
+  function urlCard(opts) {
+    return '<div class="ai-card">' +
+      '<div class="ai-card-head">' +
+        '<span class="ai-card-title">' + esc(opts.title) + '</span>' +
+        '<button class="btn sm" data-copy="' + esc(opts.url) + '" type="button">' +
+          window.icon('copy', 13) + '<span>复制</span></button>' +
+      '</div>' +
+      '<code class="ai-card-url">' + esc(opts.url) + '</code>' +
+      '<p class="ai-card-desc">' + opts.desc + '</p>' +
+      '</div>';
+  }
+
   function openAiDrawer() {
     const old = document.getElementById('ai-drawer');
     if (old) old.remove();
 
+    const slug = window.TT.S.ws;
+    const seq = window.TT.S.detailSeq;
+    const origin = window.location.origin;
+
+    // 当前页面对应的那一条，单独放最上面
+    let currentUrl = null;
+    let currentLabel = '';
+    if (seq) {
+      currentUrl = ticketTextUrl(slug, seq);
+      currentLabel = '当前这张工单（' + slug + '#' + seq + '）';
+    } else if (slug) {
+      currentUrl = wsTextUrl(slug);
+      currentLabel = '当前工作区的进行中工单（' + slug + '）';
+    } else {
+      currentUrl = indexTextUrl();
+      currentLabel = '全部工作区索引';
+    }
+
     const drawer = document.createElement('div');
-    drawer.className = 'drawer';
+    drawer.className = 'drawer ai-drawer';
     drawer.id = 'ai-drawer';
     drawer.innerHTML =
-      '<div class="close-row"><button class="icon-btn" data-act="close" title="关闭" aria-label="关闭">' +
-        window.icon('x', 16) + '</button></div>' +
-      '<h2>AI 视角 · 当前状态的纯文本地址</h2>' +
-      '<p>把这条 URL 贴给 AI 即可 —— 它拿到的是纯文本，不带任何 HTML 噪音，省 token。</p>' +
-      '<textarea class="url-box" id="ai-url" readonly></textarea>' +
-      '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
-        '<button class="btn primary" data-act="copy">一键复制</button>' +
-        '<button class="btn" data-act="lan">换成局域网 IP 写法</button>' +
+      '<div class="close-row">' +
+        '<button class="icon-btn" data-act="close" title="关闭" aria-label="关闭">' +
+          window.icon('x', 16) + '</button>' +
       '</div>' +
-      '<div class="tip">把这条 URL 贴给 AI 即可。</div>' +
-      '<p>同一条内容还有三种等价取法：末尾加 <code>.txt</code>、加 <code>?format=text</code>、或让 AI 用 <code>Accept: text/plain</code> 请求原地址。</p>';
+      '<h2>AI 视角</h2>' +
+      '<p class="ai-lead">这个系统所有页面都有一个「纯文本版本」：同一个地址，把 <code>.txt</code> 加在路径末尾（或加 <code>?format=text</code>），' +
+        '返回的就是没有 HTML 标签的纯文本。把下面的 URL 直接贴给任何 AI，它就能读懂并操作，不需要额外文档。</p>' +
 
-    const ta = drawer.querySelector('#ai-url');
-    const path = window.location.pathname;
-    const search = window.location.search;
-    ta.value = textUrlFor(path, search, false);
+      '<div class="ai-section-title">当前页面</div>' +
+      urlCard({
+        title: currentLabel,
+        url: currentUrl,
+        desc: '把这个地址发给 AI，它立刻就能看到当前上下文的完整内容。'
+      }) +
+
+      '<div class="ai-section-title">这个系统里所有可用的纯文本地址</div>' +
+      urlCard({
+        title: '① 所有工作区 + 各状态工单数',
+        url: indexTextUrl(),
+        desc: 'AI 用它先摸清有哪些工作区、每个工作区有多少工单。'
+      }) +
+      urlCard({
+        title: '② 某个工作区的「进行中」工单',
+        url: slug ? wsTextUrl(slug) : absUrl('/<工作区>/list.txt') + '?status=open,in_progress,reopened',
+        desc: '末尾的 <code>?status=</code> 可换成任意组合：' +
+          '<code>open</code>（打开）、<code>in_progress</code>（处理中）、<code>reopened</code>（重新打开）、' +
+          '<code>done</code>（已完成）、<code>cancelled</code>（已取消）；不写就是全部。' +
+          '再加 <code>&amp;q=关键词</code> 可搜索，<code>&amp;maxlen=0</code> 正文不截断。'
+      }) +
+      urlCard({
+        title: '③ 单张工单的全文（含全部评论）',
+        url: seq ? ticketTextUrl(slug, seq) : absUrl('/<工作区>/t/<序号>.txt'),
+        desc: '把 <code>&lt;工作区&gt;</code> 和 <code>&lt;序号&gt;</code> 换成实际值即可，例如 ' +
+          esc(seq ? ticketTextUrl(slug, seq) : absUrl('/my-workspace/t/12.txt')) + '。'
+      }) +
+
+      '<div class="ai-section-title">AI 想写东西时（评论 / 建单 / 改状态）</div>' +
+      '<p class="ai-note">纯文本地址只读。要写入就用下面这些 HTTP 接口，' +
+        '请求头必须带 <code>X-Actor-Id</code> 和 <code>X-Actor-Role: ai</code> 与 <code>X-Actor-Model</code>，' +
+        '这样系统才知道「是谁、用什么模型」写的。</p>' +
+      '<pre class="ai-code">' + esc([
+        '# 加一条评论（把 {id} 换成工单的 id，纯文本里能看到）',
+        'curl -X POST ' + origin + '/api/tickets/{id}/comments \\',
+        '  -H "Content-Type: application/json" \\',
+        '  -H "X-Actor-Id: your-agent-name" \\',
+        '  -H "X-Actor-Role: ai" \\',
+        '  -H "X-Actor-Model: your-model-name" \\',
+        '  -d \'{"body":"我看了，问题在 xxx，已修复"}\'',
+        '',
+        '# 新建工单',
+        'curl -X POST ' + origin + '/api/workspaces/' + (slug || '{工作区}') + '/tickets \\',
+        '  -H "Content-Type: application/json" \\',
+        '  -H "X-Actor-Id: your-agent-name" \\',
+        '  -H "X-Actor-Role: ai" \\',
+        '  -H "X-Actor-Model: your-model-name" \\',
+        '  -d \'{"title":"标题","body":"正文","priority":1,"status":"open"}\'',
+        '',
+        '# 改状态 / 改优先级 / 改正文（局部更新）',
+        'curl -X PATCH ' + origin + '/api/tickets/{id} \\',
+        '  -H "Content-Type: application/json" \\',
+        '  -H "X-Actor-Id: your-agent-name" \\',
+        '  -H "X-Actor-Role: ai" \\',
+        '  -H "X-Actor-Model: your-model-name" \\',
+        '  -d \'{"status":"in_progress"}\''
+      ].join('\n')) + '</pre>' +
+      '<p class="ai-note">上面命令里的 <code>{id}</code> 是工单的 uuid，在纯文本视图里能看到；' +
+        '也可以用 <code>{工作区}#{序号}</code> 这种更好读的写法代替。' +
+        '写完之后再请求一次同一个纯文本 URL，就能看到最新内容。</p>' +
+
+      '<div class="ai-actions">' +
+        '<button class="btn primary" data-copy="' + esc(currentUrl) + '" type="button">' +
+          window.icon('copy', 14) + '<span>复制当前 URL</span></button>' +
+      '</div>';
 
     drawer.addEventListener('click', async function (e) {
       const act = e.target.getAttribute && e.target.getAttribute('data-act');
-      if (act === 'close') drawer.remove();
-      if (act === 'lan') ta.value = textUrlFor(path, search, ta.value.indexOf('<局域网IP>') === -1);
-      if (act === 'copy') {
-        try {
-          await navigator.clipboard.writeText(ta.value);
-          toast('已复制，贴给 AI 即可', 'ok');
-        } catch (err) {
-          ta.removeAttribute('readonly');
-          ta.select();
-          document.execCommand('copy');
-          ta.setAttribute('readonly', 'readonly');
-          toast('已复制，贴给 AI 即可', 'ok');
-        }
+      if (act === 'close') { drawer.remove(); return; }
+      const copyBtn = e.target.closest && e.target.closest('[data-copy]');
+      if (copyBtn) {
+        const text = copyBtn.getAttribute('data-copy');
+        const ok = await copyText(text);
+        toast(ok ? '已复制，贴给 AI 即可' : '复制失败，请手动选中上面的地址', ok ? 'ok' : 'error');
       }
     });
+
     document.body.appendChild(drawer);
 
     // 统一的收尾：移除抽屉 + 摘掉两个全局监听，避免泄漏
@@ -418,16 +528,37 @@
     }
     function onEsc(e) { if (e.key === 'Escape') closeDrawer(); }
 
-    // 用户补充（#46）：这个抽屉点外面可以直接收回 —— 它只展示一条 URL，没有未保存内容，
-    // 不属于「点了外面就丢东西」的表单弹窗，所以维持点外关闭的交互。
+    // 用户补充（#46）：这个抽屉点外面可以直接收回 —— 它只展示地址，没有未保存内容
     function onOutside(e) {
       if (!drawer.contains(e.target)) closeDrawer();
     }
     document.addEventListener('keydown', onEsc);
-    // 延迟挂载，避免「点开抽屉的那一次点击」立刻把它关掉
     setTimeout(function () { document.addEventListener('mousedown', onOutside); }, 0);
 
     return drawer;
+  }
+
+  // 复制到剪贴板（带降级方案，非安全上下文也能用）
+  async function copyText(text) {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (e) { /* 落到下面的降级方案 */ }
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      ta.remove();
+      return ok;
+    } catch (e) {
+      return false;
+    }
   }
 
   /* ---------------- 全局状态 + 广播 ---------------- */
@@ -483,7 +614,10 @@
     splitMerged: splitMerged, joinMerged: joinMerged,
     toast: toast, openModal: openModal, confirmDialog: confirmDialog,
     openMenu: openMenu, closeMenus: closeMenus,
-    openAiDrawer: openAiDrawer, textUrlFor: textUrlFor,
+    openAiDrawer: openAiDrawer,
+    textUrlFor: textUrlFor,
+    absUrl: absUrl, wsTextUrl: wsTextUrl, ticketTextUrl: ticketTextUrl, indexTextUrl: indexTextUrl,
+    copyText: copyText,
     applyTheme: applyTheme, currentTheme: currentTheme, toggleTheme: toggleTheme,
     S: S, on: on, emit: emit, normalizeCounts: normalizeCounts
   };

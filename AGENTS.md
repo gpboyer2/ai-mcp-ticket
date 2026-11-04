@@ -16,7 +16,7 @@
 
 ## 一、目录与文件规范
 
-文件放哪、目录怎么建，以 `docs/CONTRACT.md` 与现有结构为准，不另起一套。
+文件放哪、目录怎么建、根目录允许有什么、文件名怎么起，全部以 [`docs/agents/LAYOUT.md`](./docs/agents/LAYOUT.md) 为准。
 
 提交前 `npm test` 与 `npm run smoke` 必须全绿。
 

@@ -70,41 +70,61 @@
     }).join('、');
   }
 
+  // #54 + #13：详情页两段式 —— 「元信息条」+「内容」，没有大标题概念
   function headHtml(t) {
-    return '<h2 class="detail-title" id="d-title" title="点击可编辑">' + T.esc(t.title) + '</h2>' +
-      '<div class="meta-row" id="d-meta-1">' +
-        '<span class="kv">' + T.statusBadge(t.status) + '</span>' +
-        '<span class="kv">' + T.priorityPill(t.priority) + '</span>' +
-        '<span class="kv">依赖 ' + depsInline(t.blocked_by) + '</span>' +
+    const depN = T.depsList(t.blocked_by).length;
+    return '' +
+      // ① 元信息条：一行 chip，间距统一
+      '<div class="meta-bar" id="d-meta">' +
+        '<span class="meta-chip meta-status">' + T.statusBadge(t.status) + '</span>' +
+        '<span class="meta-chip">' + T.priorityPill(t.priority) + '</span>' +
+        '<span class="meta-chip" title="' + T.esc(t.blocked_by || '无依赖') + '">' +
+          window.icon('link', 12) + '<span>依赖 ' + (depN || '无') + '</span></span>' +
+        '<span class="meta-chip">' + window.icon(t.actor_role === 'ai' ? 'bot' : 'user', 12) +
+          '<span>' + T.esc(T.actorText(t.actor_role, t.actor_id, t.model)) + '</span></span>' +
+        '<span class="meta-chip">' + window.icon('clock', 12) + '<span>建于 ' + T.fmtTime(t.created_at) + '</span></span>' +
+        '<span class="meta-chip">' + window.icon('refresh-cw', 12) + '<span>更新于 ' + T.fmtTime(t.updated_at) + '</span></span>' +
       '</div>' +
-      '<div class="meta-row" id="d-meta-2">' +
-        '<span class="kv">' + T.esc(T.actorText(t.actor_role, t.actor_id, t.model)) + '</span>' +
-        '<span class="kv">建于 ' + T.timeTag(t.created_at) + '</span>' +
-        '<span class="kv">更新于 ' + T.timeTag(t.updated_at) + '</span>' +
-      '</div>' +
-      '<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px">' +
-        '<select class="select" id="d-status" style="width:auto">' +
+
+      // ② 操作工具栏：右对齐一组
+      '<div class="detail-toolbar">' +
+        '<span class="dt-ref" id="d-ref-inline">' + T.esc(t.ref || '') + '</span>' +
+        '<span class="spacer"></span>' +
+        '<select class="select sm" id="d-status" title="改状态">' +
           T.STATUS.map(function (s) {
             return '<option value="' + s.key + '"' + (t.status === s.key ? ' selected' : '') + '>' +
               T.esc(s.label) + '</option>';
           }).join('') +
         '</select>' +
-        '<select class="select" id="d-priority" style="width:auto">' +
+        '<select class="select sm" id="d-priority" title="改优先级">' +
           T.PRIORITY.map(function (p) {
             return '<option value="' + p.value + '"' + (Number(t.priority) === p.value ? ' selected' : '') + '>' +
               T.esc(p.label) + '</option>';
           }).join('') +
         '</select>' +
-        '<button class="btn sm" id="d-edit">编辑</button>' +
-        '<button class="btn sm danger" id="d-del">删除</button>' +
+        '<button class="btn sm" id="d-copy-ai" type="button" title="复制这张工单的 AI 纯文本 URL">' +
+          window.icon('copy', 13) + '<span>AI URL</span></button>' +
+        '<button class="btn sm" id="d-edit" type="button">' +
+          window.icon('pencil', 13) + '<span>编辑</span></button>' +
+        '<button class="btn sm danger" id="d-del" type="button">' +
+          window.icon('trash-2', 13) + '<span>删除</span></button>' +
       '</div>' +
-      '<div class="panel"><h2>正文</h2>' +
+
+      // ③ 内容区：正文（没有「正文」这种分组标题，直接是内容）
+      '<div class="content-block">' +
         '<div class="body-text' + (t.body ? '' : ' empty') + '" id="d-text">' +
-          (t.body ? window.Images.renderMarkdownImages(t.body) : '（空）') + '</div>' +
+          (t.body ? window.Images.renderMarkdownImages(t.body) : '<span class="content-empty">还没有内容</span>') +
+        '</div>' +
       '</div>' +
-      '<div class="panel"><h2>评论（<span id="d-cmt-n">0</span>）</h2>' +
+
+      // ④ 评论区：分组标题 + 分隔线，和正文拉开呼吸感
+      '<div class="comments-block">' +
+        '<div class="section-divider">' +
+          '<span class="section-title">' + window.icon('message-square', 13) +
+            '<span>评论 <span id="d-cmt-n">0</span></span></span>' +
+        '</div>' +
         '<ul class="cmt-list" id="d-cmt-list"></ul>' +
-        '<div style="margin-top:10px">' +
+        '<div class="cmt-compose">' +
           '<textarea class="textarea" id="d-cmt-input" ' +
             'placeholder="写评论…（可直接 Ctrl/⌘+V 粘贴图片、拖入图片文件）" style="min-height:70px"></textarea>' +
           '<div class="img-hint" id="d-cmt-hint" hidden></div>' +
@@ -163,24 +183,25 @@
 
   function updateMeta() {
     const t = ticket;
-    const m1 = document.getElementById('d-meta-1');
-    const m2 = document.getElementById('d-meta-2');
-    if (m1) {
-      m1.innerHTML =
-        '<span class="kv">' + T.statusBadge(t.status) + '</span>' +
-        '<span class="kv">' + T.priorityPill(t.priority) + '</span>' +
-        '<span class="kv">依赖 ' + depsInline(t.blocked_by) + '</span>';
-    }
-    if (m2) {
-      m2.innerHTML =
-        '<span class="kv">' + T.esc(T.actorText(t.actor_role, t.actor_id, t.model)) + '</span>' +
-        '<span class="kv">建于 ' + T.timeTag(t.created_at) + '</span>' +
-        '<span class="kv">更新于 ' + T.timeTag(t.updated_at) + '</span>';
+    const bar = document.getElementById('d-meta');
+    if (bar) {
+      const depN = T.depsList(t.blocked_by).length;
+      bar.innerHTML =
+        '<span class="meta-chip meta-status">' + T.statusBadge(t.status) + '</span>' +
+        '<span class="meta-chip">' + T.priorityPill(t.priority) + '</span>' +
+        '<span class="meta-chip" title="' + T.esc(t.blocked_by || '无依赖') + '">' +
+          window.icon('link', 12) + '<span>依赖 ' + (depN || '无') + '</span></span>' +
+        '<span class="meta-chip">' + window.icon(t.actor_role === 'ai' ? 'bot' : 'user', 12) +
+          '<span>' + T.esc(T.actorText(t.actor_role, t.actor_id, t.model)) + '</span></span>' +
+        '<span class="meta-chip">' + window.icon('clock', 12) + '<span>建于 ' + T.fmtTime(t.created_at) + '</span></span>' +
+        '<span class="meta-chip">' + window.icon('refresh-cw', 12) + '<span>更新于 ' + T.fmtTime(t.updated_at) + '</span></span>';
     }
     const st = document.getElementById('d-status');
     if (st) st.value = t.status;
     const pr = document.getElementById('d-priority');
     if (pr) pr.value = String(t.priority);
+    const refInline = document.getElementById('d-ref-inline');
+    if (refInline) refInline.textContent = t.ref || '';
   }
 
   /* ---------------- 事件 ---------------- */

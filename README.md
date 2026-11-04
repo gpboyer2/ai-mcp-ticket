@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](https://nodejs.org)
 [![MCP](https://img.shields.io/badge/MCP-10%20tools-blueviolet)](docs/CONTRACT.md)
-[![tests](https://img.shields.io/badge/tests-85%20passing-success)](#测试)
+[![tests](https://img.shields.io/badge/tests-96%20passing-success)](#测试)
 [![smoke](https://img.shields.io/badge/smoke-17%20passing-success)](#测试)
 [![no build](https://img.shields.io/badge/build-none-informational)](#为什么不塞个-postgres)
 
@@ -117,6 +117,8 @@ git clone https://github.com/gpboyer2/ai-mcp-ticket.git && cd ai-mcp-ticket
 npm install
 npm start
 ```
+
+> **分支说明**：`dev` 是默认分支（稳定版），开发在 `feat-v1.0` 上进行。`git clone` 默认拿到 `dev`；想看最新进展：`git checkout feat-v1.0`。
 
 打开 <http://localhost:47321> —— 看板就绪。默认监听 `0.0.0.0:47321`，同一局域网的其他设备也能访问。
 
@@ -242,8 +244,8 @@ curl -X POST http://localhost:47321/api/tickets/<id>/comments \
 ## 测试
 
 ```bash
-npm test        # 85 项自动化测试（node --test，无需外部依赖）
-npm run smoke   # 17 项端到端冒烟，对着运行中的实例跑
+npm test        # 自动化测试（node --test，无需外部依赖）
+npm run smoke   # 端到端冒烟，对着运行中的实例跑
 ```
 
 自动化测试覆盖纯文本格式逐行断言、内容协商、中文 slug 的四道编解码关、MCP 协议握手与工具调用、并发写、身份校验、图片上传与 `.gitignore` 防线。冒烟测试打真实端口，验证整条链路。

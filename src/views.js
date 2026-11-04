@@ -24,7 +24,7 @@ function num(v, name) {
  * @param {object} ws  工作区行（含 slug/path）
  * @param {object} [query] {status,q,priority,sort,order,limit,offset,maxlen,comments}
  */
-export function listTextView(ctx, ws, query = {}) {
+export function listTextView(ctx, ws, query = {}, { baseUrl = '' } = {}) {
   const statuses = parseStatusFilter(query.status);
   const rows = ctx.tickets.list(ws, {
     status: statuses ? statuses.join(',') : undefined,
@@ -45,6 +45,7 @@ export function listTextView(ctx, ws, query = {}) {
     statuses,
     maxlen: num(query.maxlen, 'maxlen'),
     comments: num(query.comments, 'comments'),
+    baseUrl,
   });
 }
 
@@ -54,7 +55,7 @@ export function listTextView(ctx, ws, query = {}) {
  * @param {{event:string, body?:string, actorRole?:string}} [opts.writeEvent]
  *   本次是写操作时传入，用于在末尾追加状态提醒（契约 5.5.2）；读操作不要传。
  */
-export function ticketTextView(ctx, ws, ticket, { writeEvent } = {}) {
+export function ticketTextView(ctx, ws, ticket, { writeEvent, baseUrl = '' } = {}) {
   const full = ctx.tickets.get(ticket.id);
   full.workspace_path = ws ? ws.path : '';
   const hint = writeEvent
@@ -65,5 +66,5 @@ export function ticketTextView(ctx, ws, ticket, { writeEvent } = {}) {
         actorRole: writeEvent.actorRole,
       })
     : null;
-  return renderTicket(full, { workspace: ws, hint });
+  return renderTicket(full, { workspace: ws, hint, baseUrl });
 }
