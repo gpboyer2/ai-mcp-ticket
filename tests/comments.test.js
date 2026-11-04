@@ -8,8 +8,8 @@ import { req, startTestApp, AI_HEADERS } from './_helpers.js';
 const WS = 'demo-project';
 const create = (base, payload) =>
   req(base, `/api/workspaces/${WS}/tickets`, { method: 'POST', body: payload }).then((r) => r.body);
-const addComment = (base, ticketId, body, headers = {}) =>
-  req(base, `/api/tickets/${ticketId}/comments`, { method: 'POST', body: { body }, headers });
+const addComment = (base, ticketId, body, headers = {}, status = undefined) =>
+  req(base, `/api/tickets/${ticketId}/comments`, { method: 'POST', body: { body, status }, headers });
 
 test('评论增删改：正文、身份、model 都正确落库', async () => {
   const app = await startTestApp();
@@ -28,7 +28,8 @@ test('评论增删改：正文、身份、model 都正确落库', async () => {
     assert.equal(c1.body.created_at, c1.body.updated_at, '刚创建时两个时间应相同');
 
     // AI 评论：必须记录当时的 model（契约 1.1：换模型后历史评论保留当时的 model）
-    const c2 = await addComment(app.base, t.id, 'AI 说的话', AI_HEADERS);
+    // 带 status=in_progress：契约 5.5.2 硬门要求 AI 不能在「打开」的单上直接写评论
+    const c2 = await addComment(app.base, t.id, 'AI 说的话', AI_HEADERS, 'in_progress');
     assert.equal(c2.body.actor_id, 'deepseek');
     assert.equal(c2.body.actor_role, 'ai');
     assert.equal(c2.body.model, 'deepseek-v4.1', 'AI 评论必须落 model');

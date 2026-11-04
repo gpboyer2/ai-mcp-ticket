@@ -37,7 +37,8 @@ export function createApp({
   const db = openDb(dbPath);
   const workspaceRepo = createWorkspaceRepo(db);
   const ticketRepo = createTicketRepo(db, workspaceRepo);
-  const commentRepo = createCommentRepo(db);
+  // 评论 repo 拿工单 repo：写评论时可能同一次提交改状态，迁移规则只能有一份（tickets.update）
+  const commentRepo = createCommentRepo(db, ticketRepo);
   const actorRepo = createActorRepo(db);
 
   const ctx = {

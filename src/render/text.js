@@ -113,49 +113,89 @@ export function renderTicketList({
     lines.push('');
   });
 
+  // 契约 5.5.4：读侧漏网标记，放在 # end. 之前（只标记，不改任何数据）
+  lines.push(...missedStatusLines(tickets, lines[lines.length - 1] === ''));
+
   lines.push('# end. 用 ?status= 过滤，?format=text 强制纯文本');
   return lines.join('\n') + '\n';
 }
 
-// 完工词表（契约 5.5.2）。不区分大小写，中英文都覆盖。
-const DONE_WORDS = /已完成|搞定了|已修复|已解决|修好了|done|fixed|resolved/i;
+// 完工词表（契约 5.5.4）。只用于读侧标记，**绝不触发状态变更** —— 词表猜错会改坏数据，
+// 而漏判只是少提醒一次，下一轮读列表还能看见。
+//
+// 为什么不含裸英文 done / fixed / resolved：在这个项目里它们几乎总是在**讨论状态值本身**
+// （`done → reopened`、`status=done`、`done=circle-check`）或 CSS 的 `position: fixed`，
+// 不是完工声明。拿真实库 41 条 AI 评论量过：带裸英文词命中 14 条，其中 6 条是这种元文本
+// （误报 43%）；只留中文完工词并要求出现在句首/行首后命中 7 条，全部是真完工报告。
+// 宁可少报（漏了下轮读列表还能看见），不可乱报 —— 乱报的提醒会和旧 statusHint 一样被无视。
+const DONE_WORDS = /(?:^|[。！\n])\s*(?:已完成|搞定了|已修复|已解决|修好了)|^\s*#{1,6}\s*(?:完成情况|做完的动作|验收结果)/m;
+
+/** 该补的状态档位：done = 可能漏收尾，in_progress = 可能漏开工 */
+const NEEDS = {
+  done: {
+    text: '可能漏了 status=done（评论像是完工报告，状态还没改成已完成）',
+    // reopened 不能直达 done（契约 5.5.1：reopened → in_progress | cancelled | reopened），
+    // 文案必须把中转那一步说出来，否则 AI 照着调会吃 400 TRANSITION_INVALID
+    fix: '确认做完就调 ticket_update status=done（若是 reopened 的单，先改 in_progress 再改 done）',
+  },
+  in_progress: {
+    text: '漏了 status=in_progress（AI 已经在上面写过评论，状态还停在打开）',
+    fix: '开始处理了就调 ticket_update status=in_progress',
+  },
+};
 
 /**
- * 状态提醒（契约 5.5.2）。软约束：AI 不是不听话，是没人提醒它。
- * 只在"本次是写操作"时由调用方传入 event，读操作不传 → 不产生提醒（否则每次读多一行就是噪音）。
- * @param {object} p
- * @param {string} p.status    写入后的工单状态
- * @param {'comment_add'|'ticket_create'} [p.event] 本次写操作类型；读操作不传
- * @param {string} [p.body]    本次写入的正文（评论正文，不是工单 content；判断"完工报告"用）
- * @param {'user'|'ai'} [p.actorRole]
- * @returns {string|null} 需要追加的提醒行（不含换行），无需提醒时返回 null
+ * 单张工单该补什么状态（契约 5.5.4）。只标记，不改任何数据。
+ *
+ * 三种漏网都要抓，因为用户抱怨的就是这几种：
+ * - `in_progress` / `reopened` 且最后一条 AI 评论像完工报告 → 漏了 done
+ * - `open` 且**有任何** AI 评论 → 漏了 in_progress。这是历史遗留最多的一类
+ *   （ai-剧本#60 就是：评论写着「做完的动作」，状态还停在打开），
+ *   也是 in_progress→open 被合法挪回去之后的形态。
+ *
+ * 只看最后一条 **AI** 评论，不看最后一条评论：用户事后追一句「收到」不该把 AI 的完工
+ * 报告盖掉，而 AI 说完「已修复」又补一句「又发现边界问题」时，确实不该再催它收尾。
+ * @param {object} t 工单（含 status / ref / comments）
+ * @returns {'done'|'in_progress'|null}
  */
-export function statusHint({ status, event, body = '', actorRole = 'ai' } = {}) {
-  if (!event) return null; // 读操作一律不加
+function missedStatusKind(t) {
+  const aiComments = (t.comments || []).filter((c) => c.actor_role === 'ai');
+  if (!aiComments.length) return null;
 
-  if (event === 'ticket_create') {
-    // 只有 AI 建单才提醒：用户建单后自己会推进状态，提醒他是噪音
-    if (actorRole === 'ai' && status === 'open') {
-      return '# 状态提醒: 新建的工单是「打开」。开始处理时请调 ticket_update status=in_progress';
-    }
-    return null;
-  }
+  if (t.status === 'open') return 'in_progress'; // open 单上有 AI 评论 = 干过活却没开工
+  if (t.status !== 'in_progress' && t.status !== 'reopened') return null;
 
-  if (event === 'comment_add') {
-    if (status === 'open' && actorRole === 'ai') {
-      return '# 状态提醒: 该工单仍是「打开」。若你已开始处理，请调 ticket_update status=in_progress';
-    }
-    if (status === 'in_progress' && DONE_WORDS.test(body)) {
-      return '# 状态提醒: 评论像是完工报告。若确实已完成，请调 ticket_update status=done';
-    }
-    return null;
-  }
-
-  return null;
+  const last = aiComments[aiComments.length - 1];
+  return DONE_WORDS.test(String(last.body ?? '')) ? 'done' : null;
 }
 
 /**
- * 锁定提醒（契约 5.5.2）。为什么要有它：AI 读列表时该看到「这张被别人占了」，
+ * 读侧漏网标记（契约 5.5.4）：只标记，不改数据。
+ * 两种原因分两行写，不混排 —— 混在一行里就说不清哪张该补 done、哪张该补 in_progress，
+ * 而「补错状态」比「不提醒」更糟。都放在 `# end.` 之前。
+ * @param {Array} tickets 本次列表里的工单（含 comments）
+ * @param {boolean} alreadyBlank 正文末尾是否已经是空行（每张工单块后面都跟一个空行）
+ * @returns {string[]} 需要追加的行（含分隔空行），没有漏网时返回空数组
+ */
+function missedStatusLines(tickets, alreadyBlank) {
+  const byKind = { done: [], in_progress: [] };
+  for (const t of tickets) {
+    const kind = missedStatusKind(t);
+    if (kind) byKind[kind].push(t.ref);
+  }
+  const lines = [];
+  for (const kind of ['done', 'in_progress']) {
+    const refs = byKind[kind];
+    if (!refs.length) continue;
+    // 空行只为分隔：正文末尾已经是空行就不再叠一个，两档之间才补
+    if (!lines.length ? !alreadyBlank : true) lines.push('');
+    lines.push(`# 待办: ${refs.join(' ')} ${NEEDS[kind].text}。${NEEDS[kind].fix}`);
+  }
+  return lines;
+}
+
+/**
+ * 锁定提醒（契约 5.5.6）。为什么要有它：AI 读列表时该看到「这张被别人占了」，
  * 而不是动手改到一半被 409 顶回来。这条提醒只在写操作的返回里出现，读操作不打扰。
  * @param {object} ticket 含 assignee_* 与 claimed_at
  * @param {{id:string, role:'user'|'ai'}} actor 本次调用者
@@ -203,10 +243,8 @@ export function renderTicket(ticket, { maxlen = 0, workspace, hint = null, baseU
     }
   }
 
-  // 提醒行放在 # end. 之前，同一个 # 前缀，保持纯文本一致性。
-  // 状态提醒与锁定提醒是两条独立规则，可能同时命中，各自一行、中间空一行（契约 5.5.2）。
-  const hints = (Array.isArray(hint) ? hint : [hint]).filter(Boolean);
-  for (const h of hints) lines.push('', h);
+  // 锁定提醒（契约 5.5.6）放在 # end. 之前，同一个 # 前缀，保持纯文本一致性
+  if (hint) lines.push('', hint);
   const base = baseUrl ? baseUrl.replace(/\/+$/, '') : '';
   lines.push(
     '',

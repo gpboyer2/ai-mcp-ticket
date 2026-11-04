@@ -193,17 +193,38 @@ async function main() {
     return `comment=${String(r.json.id).slice(0, 8)}…`;
   });
 
-  // 4. AI 加评论（必须记录 model）
-  await step('AI 加评论 (带 X-Actor-Id/Model)', async () => {
+  // 4. 硬门：AI 在「打开」的工单上写评论必须被拒（契约 5.5.2）
+  await step('硬门：AI 在 open 单上写评论 → 400 TICKET_NOT_STARTED', async () => {
     const r = await api(`/api/tickets/${ticket.id}/comments`, {
       method: 'POST',
       headers: asAi(),
-      body: { body: '冒烟：这是 AI 写的评论' },
+      body: { body: '冒烟：AI 想不表态就直接评论' },
+    });
+    mustEq(r.status, 400, 'HTTP 状态码');
+    mustEq(r.json?.error?.code, 'TICKET_NOT_STARTED', '错误码');
+    mustMatch(r.json.error.message, /in_progress/, '文案必须给出「改成处理中」这条路');
+    // 拒绝就是拒绝，不能留下半截数据
+    const after = await api(`/api/tickets/${ticket.id}/comments`);
+    mustEq(after.json.length, 1, '被拒的评论不能落库');
+    const one = await api(`/api/tickets/${ticket.id}`);
+    mustEq(one.json.status, 'open', '被拒时状态不能被动过');
+    return 'TICKET_NOT_STARTED';
+  });
+
+  // 4.2 AI 加评论：带 status=in_progress，评论与状态同一次提交（契约 5.5.3）
+  await step('AI 加评论并同一次提交 status=in_progress（必须记录 model）', async () => {
+    const r = await api(`/api/tickets/${ticket.id}/comments`, {
+      method: 'POST',
+      headers: asAi(),
+      body: { body: '冒烟：这是 AI 写的评论', status: 'in_progress' },
     });
     mustEq(r.status, 201, 'HTTP 状态码');
     mustEq(r.json.actor_role, 'ai', '角色');
     mustEq(r.json.model, AI_MODEL, 'AI 评论必须记录 model（审计事实）');
-    return `${r.json.actor_id} (${r.json.model})`;
+    const one = await api(`/api/tickets/${ticket.id}`);
+    mustEq(one.json.status, 'in_progress', '状态必须与评论一起改掉（原子提交）');
+    mustEq(one.json.comments.length, 2, '评论数应为 2（用户 + AI）');
+    return `${r.json.actor_id} (${r.json.model}) → in_progress`;
   });
 
   // 4.5 关键：评论写入后工单 updated_at 必须前进（AI 靠它判断有没有新动静）
@@ -217,8 +238,8 @@ async function main() {
     return `${ticket.updated_at} → ${r.json.updated_at}`;
   });
 
-  // 5. 改状态为 in_progress
-  await step('改状态 → in_progress (PATCH)', async () => {
+  // 5. 同状态 PATCH 幂等（契约 5.5.1：前端拖回原位不能报错）
+  await step('PATCH 同状态幂等放行 (status 已是 in_progress)', async () => {
     const r = await api(`/api/tickets/${ticket.id}`, {
       method: 'PATCH',
       headers: asAi(),
@@ -226,8 +247,8 @@ async function main() {
     });
     mustEq(r.status, 200, 'HTTP 状态码');
     mustEq(r.json.status, 'in_progress', '状态');
-    must(Number(r.json.position) > 0, `换列后 position 应为正数，实际 ${r.json.position}`);
-    return `pos=${ticket.position} → ${r.json.position}`;
+    must(Number(r.json.position) > 0, `position 应为正数，实际 ${r.json.position}`);
+    return `pos=${r.json.position}`;
   });
 
   // 6. 拖拽式 PATCH position
@@ -262,9 +283,44 @@ async function main() {
     return `${r.text.split('\n').length} 行纯文本`;
   });
 
+  // 7.5 读侧标记：open 单上有 AI 评论 → 提示补 in_progress（契约 5.5.4 的 in_progress 档）
+  await step('读侧标记：open 单上有 AI 评论 → 列表出现 in_progress 档待办', async () => {
+    // 造一张「AI 干过活、状态还开着」的单：先 in_progress 写评论，再合法挪回 open。
+    // 这正是用户抱怨的那类漏网单（历史遗留的 open + AI 评论也长这样）。
+    const made = await api(`/api/workspaces/${encodeURIComponent(wsSlug)}/tickets`, {
+      method: 'POST',
+      headers: asAi(),
+      body: { content: `[smoke] 漏网单 ${stamp}` },
+    });
+    mustEq(made.status, 201, '建单 HTTP 状态码');
+    const t = made.json;
+    await api(`/api/tickets/${t.id}`, { method: 'PATCH', headers: asAi(), body: { status: 'in_progress' } });
+    await api(`/api/tickets/${t.id}/comments`, {
+      method: 'POST',
+      headers: asAi(),
+      body: { body: '冒烟：AI 已经干过活了' },
+    });
+    const back = await api(`/api/tickets/${t.id}`, { method: 'PATCH', headers: asAi(), body: { status: 'open' } });
+    mustEq(back.status, 200, 'in_progress → open 是合法迁移（契约 5.5.1）');
+
+    const r = await fetchText(`/${encodeURIComponent(wsSlug)}/list?status=open`);
+    const todos = r.text.split('\n').filter((l) => l.startsWith('# 待办: '));
+    const line = todos.find((l) => l.includes(t.ref));
+    must(line, `open 单上 AI 评论过就该被点名，实际待办行：${JSON.stringify(todos)}`);
+    must(line.includes('status=in_progress'), `该档应指向 in_progress，实际：${line}`);
+    must(!line.includes('status=done'), `open 档不能提示 done（会诱导跳步），实际：${line}`);
+    must(r.text.indexOf('# 待办: ') < r.text.indexOf('# end. '), '待办行必须在 # end. 之前');
+
+    // 只标记不改数据
+    const one = await api(`/api/tickets/${t.id}`);
+    mustEq(one.json.status, 'open', '读侧标记不能改状态');
+
+    await api(`/api/tickets/${t.id}`, { method: 'DELETE', headers: asAi() });
+    return `${t.ref} → in_progress 档`;
+  });
+
   // 8. 拉单工单纯文本
-  await step('单工单纯文本 (GET /{ws}/t/{seq}.txt)', async () => {
-    const r = await fetchText(`/${encodeURIComponent(wsSlug)}/t/${ticket.seq}.txt`);
+  await step('单工单纯文本 (GET /{ws}/t/{seq}.txt)', async () => {    const r = await fetchText(`/${encodeURIComponent(wsSlug)}/t/${ticket.seq}.txt`);
     mustEq(r.status, 200, 'HTTP 状态码');
     must(r.contentType.startsWith('text/plain'), `Content-Type 应为 text/plain，实际 ${r.contentType}`);
     mustMatch(r.text, new RegExp(`^# ai-mcp-ticket ticket: ${escRe(ticket.ref)}$`, 'm'), '首行（契约 4.3）');
@@ -372,6 +428,43 @@ async function main() {
     must(!text.includes('冒烟：这是通过 MCP 加的评论'), '删掉的评论不应再出现在返回文本里');
     must(text.includes('## 评论 (2)'), '删后评论数应回到 2');
     return '剩余 2 条';
+  });
+
+  // 10. 收尾：MCP 带 status=done 写评论 —— 「已完成」的唯一可靠通道，同时释放认领
+  await step('MCP comment_add 带 status=done：状态落 done 且认领被释放', async () => {
+    const claim = await mcp({
+      jsonrpc: '2.0',
+      id: 6,
+      method: 'tools/call',
+      params: { name: 'ticket_claim', arguments: { ref: ticket.ref, actor_id: AI_ID, actor_model: AI_MODEL } },
+    });
+    must(!claim.result?.isError, `ticket_claim 报错: ${claim.result?.content?.[0]?.text}`);
+    must(claim.result.content[0].text.includes('assignee:'), '认领后应有 assignee 行');
+
+    const r = await mcp({
+      jsonrpc: '2.0',
+      id: 7,
+      method: 'tools/call',
+      params: {
+        name: 'comment_add',
+        arguments: {
+          ref: ticket.ref,
+          body: '冒烟：干完了',
+          status: 'done',
+          actor_id: AI_ID,
+          actor_model: AI_MODEL,
+        },
+      },
+    });
+    must(!r.result?.isError, `comment_add 带 status=done 报错: ${r.result?.content?.[0]?.text}`);
+    const text = r.result.content[0].text;
+    must(text.includes('status: 已完成 (done)'), '状态必须与评论一次提交成 done');
+    must(!text.includes('assignee:'), 'done 必须释放认领（同一次 UPDATE）');
+
+    const one = await api(`/api/tickets/${ticket.id}`);
+    mustEq(one.json.status, 'done', '库里状态');
+    mustEq(one.json.assignee_id, null, '库里认领必须被清空');
+    return 'done + 认领已释放';
   });
 
   // 11. 删工单

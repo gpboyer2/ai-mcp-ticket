@@ -8,8 +8,10 @@ import { req, startTestApp, AI_HEADERS } from './_helpers.js';
 const WS = 'demo-project';
 const create = (base, payload, headers = {}) =>
   req(base, `/api/workspaces/${WS}/tickets`, { method: 'POST', body: payload, headers }).then((r) => r.body);
-const comment = (base, ticketId, headers = {}, body = 'x') =>
-  req(base, `/api/tickets/${ticketId}/comments`, { method: 'POST', body: { body }, headers });
+// status 默认不带：契约 5.5.2 的硬门只拦「AI 在打开的单上写评论」，
+// 这里需要 AI 写评论的用例都显式带 status=in_progress，与真实调用形态一致。
+const comment = (base, ticketId, headers = {}, body = 'x', status = undefined) =>
+  req(base, `/api/tickets/${ticketId}/comments`, { method: 'POST', body: { body, status }, headers });
 
 test('role=ai 缺 id 或 model → 400 且 code=ACTOR_REQUIRED', async () => {
   const app = await startTestApp();
@@ -111,7 +113,7 @@ test('三个来源的优先级：头 > body.actor > query', async () => {
     // 三者都给：头赢
     const all3 = await req(app.base, `/api/tickets/${t.id}/comments${query}`, {
       method: 'POST',
-      body: { body: 'x', actor: { id: 'b-actor', role: 'ai', model: 'b-model' } },
+      body: { body: 'x', status: 'in_progress', actor: { id: 'b-actor', role: 'ai', model: 'b-model' } },
       headers: AI_HEADERS,
     });
     assert.equal(all3.body.actor_id, 'deepseek', '头优先级最高（契约 2）');
@@ -120,7 +122,7 @@ test('三个来源的优先级：头 > body.actor > query', async () => {
     // 只给 body + query：body 赢
     const bodyAndQuery = await req(app.base, `/api/tickets/${t.id}/comments${query}`, {
       method: 'POST',
-      body: { body: 'x', actor: { id: 'b-actor', role: 'ai', model: 'b-model' } },
+      body: { body: 'x', status: 'in_progress', actor: { id: 'b-actor', role: 'ai', model: 'b-model' } },
     });
     assert.equal(bodyAndQuery.body.actor_id, 'b-actor', 'body.actor 优先于 query');
     assert.equal(bodyAndQuery.body.model, 'b-model');
@@ -128,7 +130,7 @@ test('三个来源的优先级：头 > body.actor > query', async () => {
     // 只给 query
     const queryOnly = await req(app.base, `/api/tickets/${t.id}/comments${query}`, {
       method: 'POST',
-      body: { body: 'x' },
+      body: { body: 'x', status: 'in_progress' },
     });
     assert.equal(queryOnly.body.actor_id, 'q-actor', '没有头和 body.actor 时才用 query');
     assert.equal(queryOnly.body.model, 'q-model');
@@ -156,7 +158,7 @@ test('首次出现的 actor 自动登记到 actors 表，并统计写入次数',
   const app = await startTestApp();
   try {
     const t = await create(app.base, { content: '登记' });
-    await comment(app.base, t.id, AI_HEADERS);
+    await comment(app.base, t.id, AI_HEADERS, 'x', 'in_progress');
     await comment(app.base, t.id, AI_HEADERS);
     await comment(app.base, t.id, {}); // user
 
@@ -210,7 +212,7 @@ test('同一个 AI 换模型后，历史评论保留当时的 model（契约 1.1
       'X-Actor-Role': 'ai',
       'X-Actor-Id': 'deepseek',
       'X-Actor-Model': 'deepseek-v4.1',
-    });
+    }, 'x', 'in_progress');
     const newComment = await comment(app.base, t.id, {
       'X-Actor-Role': 'ai',
       'X-Actor-Id': 'deepseek',

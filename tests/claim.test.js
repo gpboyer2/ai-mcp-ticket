@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
 import { openDb } from '../src/db.js';
-import { req, startTestApp, AI_HEADERS } from './_helpers.js';
+import { req, startTestApp, mcpCall, AI_HEADERS } from './_helpers.js';
 
 const WS = 'demo-project';
 
@@ -196,6 +196,18 @@ test('写操作保护：被 AI 认领且未过期时，别的 AI 的 PATCH/评�
       method: 'POST', body: { body: '想评论' }, headers: OTHER_AI,
     });
     assert.equal(comment.status, 409, '别的 AI 评论应 409');
+
+    // MCP 那条路也必须受同一条规则约束（契约 1.6 第 6 条没给 MCP 开例外）。
+    // 原来 MCP comment_add 完全绕过了认领保护，REST 拦住、MCP 放行 —— 现在共用 comments.create 里那一份。
+    const viaMcp = await mcpCall(app.base, 'comment_add', {
+      ref: t.ref,
+      body: '想通过 MCP 评论',
+      status: 'in_progress',
+      actor_id: 'claude',
+      actor_model: 'claude-sonnet-4.5',
+    });
+    assert.equal(viaMcp.isError, true, 'MCP 也必须被认领保护拦住');
+    assert.match(viaMcp.content[0].text, /认领/, `错误文案应说明被认领：${viaMcp.content[0].text}`);
   } finally {
     await app.close();
   }
@@ -230,8 +242,9 @@ test('写操作保护不误伤：认领者本人仍可 PATCH/评论', async () =
       method: 'PATCH', body: { content: '认领者自己改' }, headers: AI_HEADERS,
     });
     assert.equal(patch.status, 200);
+    // 评论带 status=in_progress：契约 5.5.2 的硬门要求 AI 在「打开」的单上先表态
     const comment = await req(app.base, `/api/tickets/${t.id}/comments`, {
-      method: 'POST', body: { body: '认领者自己评论' }, headers: AI_HEADERS,
+      method: 'POST', body: { body: '认领者自己评论', status: 'in_progress' }, headers: AI_HEADERS,
     });
     assert.equal(comment.status, 201);
   } finally {

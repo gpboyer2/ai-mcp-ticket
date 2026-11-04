@@ -3,7 +3,6 @@ import express from 'express';
 import { resolveActor, HttpError } from '../actor.js';
 import { syncWorkspaces } from '../workspace-sync.js';
 import { listTextView, baseUrlOf } from '../views.js';
-import { statusHint } from '../render/text.js';
 
 export function createApiRouter(ctx) {
   const { db, workspaces, tickets, comments, actors, syncOpts } = ctx;
@@ -104,18 +103,10 @@ export function createApiRouter(ctx) {
   r.post('/tickets/:id/comments', (req, res) => {
     const actor = actorOf(req);
     const ticketId = ticketIdOf(req.params.id);
-    tickets.assertWritable(ticketId, actor); // 契约 1.6 第 6 条：被他人认领且未过期 → 409（user 例外）
+    // body 里的 status 可选：带上就在同一次事务里改状态（契约 5.5.3）。
+    // 认领保护与状态硬门都在 comments.create 里（REST 与 MCP 共用同一处实现）。
     const c = comments.create(ticketId, req.body || {}, actor);
-    // 契约 5.5.2 的提醒本来是给纯文本视图的，但 AI 也可能走 REST 写评论，
-    // 这里额外回一个 status_hint 字段（前端忽略未知字段），让两条路的软约束一致。
-    const t = tickets.requireTicket(ticketId);
-    const hint = statusHint({
-      status: t.status,
-      event: 'comment_add',
-      body: req.body?.body,
-      actorRole: actor.role,
-    });
-    res.status(201).json(hint ? { ...c, status_hint: hint } : c);
+    res.status(201).json(c);
   });
 
   r.patch('/comments/:id', (req, res) => {

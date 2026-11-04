@@ -68,7 +68,11 @@ const TICKETS = [
     content: '纯文本列表在 status 过滤下仍返回全量 counts\n\ncounts 必须是该工作区的全量计数，不受本次筛选影响，否则看板列头的数字会跟着筛选跳。',
     status: 'open',
     priority: 1,
-    comments: [{ actor: 'ai2', body: '确认过 repo 层：countsOf 走独立 SQL，不带 status 条件。' }],
+    // 这条演示「评论与状态同一次提交」：工单建出来是 open，AI 写评论时带 status=in_progress，
+    // 一次调用就把评论落库 + 状态推进，不用先单独 PATCH 一次。
+    comments: [
+      { actor: 'ai2', body: '确认过 repo 层：countsOf 走独立 SQL，不带 status 条件。', status: 'in_progress' },
+    ],
   },
   {
     content: '拖拽换列后 position 落到目标列末尾\n\n拖到另一列时，position 取该列当前最大值 + 1024；同列内拖动则按前后邻居取中值。',
@@ -158,7 +162,8 @@ async function main() {
       await api(`/api/tickets/${made.id}/comments`, {
         method: 'POST',
         headers: ACTOR_HEADERS[c.actor],
-        body: { body: c.body },
+        // status 可选：带上就与评论同一次提交（契约 5.5.3）。AI 在 open 单上不带 status 会被硬门拒绝。
+        body: { body: c.body, status: c.status },
       });
       comments++;
     }

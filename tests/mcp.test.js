@@ -112,10 +112,11 @@ test('ticket_list / ticket_get / comment_add 返回 content[0].type=text 且是�
     assert.ok(getText.startsWith(`# ai-mcp-ticket ticket: ${t.ref}`), '必须是 4.3 格式的单张纯文本');
     assert.ok(getText.includes(`id: ${t.id}`), '要带 uuid 供 AI 后续操作');
 
-    // comment_add
+    // comment_add（带 status=in_progress：契约 5.5.2 硬门要求 AI 在「打开」的单上先表态）
     const addResult = await mcpCall(app.base, 'comment_add', {
       ref: t.ref,
       body: 'AI 通过 MCP 写的评论',
+      status: 'in_progress',
       actor_id: 'deepseek',
       actor_model: 'deepseek-v4.1',
     });

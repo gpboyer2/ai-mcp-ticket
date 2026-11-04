@@ -144,7 +144,7 @@ export function buildMcpServer(ctx, { baseUrl = '' } = {}) {
         const actor = writer(args);
         const ws = requireWs(args.workspace);
         const t = tickets.create(ws, args, actor);
-        return ok(renderOne(t.id, { event: 'ticket_create', actorRole: actor.role, actor }));
+        return ok(renderOne(t.id, { actor }));
       } catch (e) {
         return fail(e);
       }
@@ -279,11 +279,16 @@ export function buildMcpServer(ctx, { baseUrl = '' } = {}) {
       title: '添加评论',
       description:
         '给工单加一条评论，返回该工单最新全文（含新评论）。' +
-        '处理完务必把 status 推进到 in_progress / done；状态不是装饰，用户靠它看看板。' +
-        'actor_id/actor_model 必填：调用方自报写入者标识与模型名。',
+        '工单还是「打开」时，AI 必须先表态：要么先 ticket_update status=in_progress，' +
+        '要么本次评论直接带 status=in_progress，否则会被 400 TICKET_NOT_STARTED 拒绝。' +
+        '干完了就在写评论时带 status=done —— 这是把工单推进到「已完成」的唯一可靠方式，' +
+        '状态不是装饰，用户靠它看看板。actor_id/actor_model 必填：调用方自报写入者标识与模型名。',
       inputSchema: {
         ref: z.string().min(1).describe('工单引用，形如 {slug}#{seq}，或 uuid'),
         body: z.string().min(1).max(10000).describe('评论正文，1..10000 字'),
+        status: STATUS_ENUM.optional().describe(
+          '可选：与本次评论在同一次提交里改状态（照样走合法迁移表，改成 done/cancelled 会同时释放认领）',
+        ),
         ...actorFields,
       },
       annotations: WRITE,
@@ -293,8 +298,8 @@ export function buildMcpServer(ctx, { baseUrl = '' } = {}) {
         const actor = writer(args);
         const t = tickets.findByIdOrRef(args.ref);
         if (!t) throw new HttpError(404, 'TICKET_NOT_FOUND', `工单不存在: ${args.ref}`);
-        comments.create(t.id, { body: args.body }, actor);
-        return ok(renderOne(t.id, { event: 'comment_add', body: args.body, actorRole: actor.role, actor }));
+        comments.create(t.id, { body: args.body, status: args.status }, actor);
+        return ok(renderOne(t.id, { actor }));
       } catch (e) {
         return fail(e);
       }
@@ -318,7 +323,7 @@ export function buildMcpServer(ctx, { baseUrl = '' } = {}) {
       try {
         const actor = writer(args);
         const c = comments.update(args.comment_id, { body: args.body });
-        return ok(renderOne(c.ticket_id, { event: 'comment_add', body: args.body, actorRole: actor.role, actor }));
+        return ok(renderOne(c.ticket_id, { actor }));
       } catch (e) {
         return fail(e);
       }

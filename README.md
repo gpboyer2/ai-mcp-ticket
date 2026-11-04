@@ -238,15 +238,18 @@ Agent 写东西时带这三个头：
 curl -X POST http://localhost:47321/api/tickets/<id>/comments \
   -H 'content-type: application/json' \
   -H 'X-Actor-Role: ai' -H 'X-Actor-Id: deepseek' -H 'X-Actor-Model: deepseek-v4.1' \
-  -d '{"body":"已定位到问题在第 42 行"}'
+  -d '{"body":"已定位到问题在第 42 行","status":"in_progress"}'
 ```
+
+`status` 可选，带上就和评论同一次提交（工单还是「打开」时 AI 必须带，否则 400 `TICKET_NOT_STARTED`）。
+干完了就写 `"status":"done"` —— 这是把工单推进到「已完成」的唯一可靠方式，服务端不做词表猜测。
 
 ---
 
 ## 测试
 
 ```bash
-npm test        # 103 项自动化测试（node --test，无需外部依赖，随机端口，不碰任何固定端口）
+npm test        # 自动化测试（node --test，无需外部依赖，随机端口，不碰任何固定端口）
 npm run smoke   # 端到端冒烟，对着运行中的实例跑
 ```
 

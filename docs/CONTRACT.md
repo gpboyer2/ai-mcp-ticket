@@ -236,9 +236,12 @@ claimed_at      TEXT    ISO8601 UTC
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/api/tickets/:id/comments` | 列评论（升序） |
-| POST | `/api/tickets/:id/comments` | 新增。body: `{body}` |
+| POST | `/api/tickets/:id/comments` | 新增。body: `{body, status?}` |
 | PATCH | `/api/comments/:id` | 改正文。body: `{body}` |
 | DELETE | `/api/comments/:id` | 删除 |
+
+`status` 可选：带上就在同一个事务里改状态，规则见 5.5.3。AI 在 `open` 工单上不带 `status` 会被
+**400 `TICKET_NOT_STARTED`** 拒绝（见 5.5.2）。
 
 评论写入后**同时刷新所属工单的 `updated_at`**。
 
@@ -314,6 +317,7 @@ claimed_at      TEXT    ISO8601 UTC
 - 已被认领时在 `blocked_by` 行之后加一行 `assignee: <actorLabel> since <claimed_at>`，`user` 认领写 `assignee: user since <claimed_at>`
 - `content` 超 `maxlen`（默认 800，`?maxlen=` 可调，0 不截断）截断加 `…(截断)`
 - `?comments=0` 隐藏评论（默认全显）；`?comments=5` 只显最后 5 条并注 `(共 N 条，仅显示最后 5 条)`
+- 有漏网工单时，末尾多出 1~2 行 `# 待办:`（按原因分档，见 5.5.4）
 - 末尾固定：`# end. 用 ?status= 过滤，?format=text 强制纯文本`
 
 ### 4.3 单张工单纯文本格式
@@ -356,7 +360,7 @@ id: 6f1c...
 | `ticket_release` | `ref, actor_id, actor_model` | 释放自己对该工单的认领，返回工单纯文本 |
 | `ticket_delete` | `ref, actor_id, actor_model` | 删除，返回 `deleted: ref` |
 | `comment_list` | `ref` | 评论纯文本 |
-| `comment_add` | `ref, body, actor_id, actor_model` | 加评论，返回该工单最新纯文本 |
+| `comment_add` | `ref, body, status?, actor_id, actor_model` | 加评论（可同一次提交改状态），返回该工单最新纯文本 |
 | `comment_update` | `comment_id, body, actor_id, actor_model` | 改评论 |
 | `comment_delete` | `comment_id, actor_id, actor_model` | 删评论 |
 
@@ -381,23 +385,93 @@ cancelled   → reopened | cancelled(幂等)
 - `reopened` 用于救回 `done`/`cancelled`，故不开放 `done → open` 跳步
 - 删除不受状态限制
 
-#### 5.5.2 状态提醒（软约束）
+#### 5.5.2 状态硬门：AI 不许在「打开」的工单上写评论
 
-每个写操作的纯文本返回末尾，按条件追加一行提醒（仅需要时，不浪费 token；非错误，操作已成功），放在 `# end.` 之前：
+**为什么是硬门而不是提醒**：软提醒只在返回文本末尾追加一行，改不改由 AI 自己决定，不改没有任何后果 ——
+实测结果是 36 张工单里 0 张被认领、状态变更全部靠事后批量补，唯一还 open 的单里 AI 评论明明写着「做完了」。
+所以这里改成**直接拒绝**：AI 必须当场表态。
 
-| 触发条件 | 追加提醒 |
-|---|---|
-| `status=open` 且本次 `comment_add`（AI） | `# 状态提醒: 该工单仍是「打开」。若你已开始处理，请调 ticket_update status=in_progress` |
-| `status=in_progress` 且本次 `comment_add` 正文命中完成词（已完成/搞定了/已修复/已解决/修好了/done/fixed/resolved） | `# 状态提醒: 评论像是完工报告。若确实已完成，请调 ticket_update status=done` |
-| `status=open` 且本次 `ticket_create`（AI） | `# 状态提醒: 新建的工单是「打开」。开始处理时请调 ticket_update status=in_progress` |
-| 本次是写操作，且工单被**他人**认领且未过期 | `# 锁定提醒: 该工单已被 ai:other (model) 于 <claimed_at> 认领，请勿修改或评论` |
-| 其它 | 不追加 |
+规则（只对 `role=ai` 生效，`role=user` 行为完全不变）：
 
-锁定提醒与状态提醒是两条独立规则（`claimLockHint` / `statusHint`），可以同时出现，各自一行，中间空一行。
+| 工单当前状态 | 调用者 | 本次评论带 `status` | 结果 |
+|---|---|---|---|
+| `open` | `ai` | 不带 / 带 `open` | **400 `TICKET_NOT_STARTED`**，评论不落库，状态不动 |
+| `open` | `ai` | 带 `in_progress` 等能离开 open 的状态 | 201，评论与状态一次提交 |
+| 非 `open` | `ai` | 不带 | 201，只写评论 |
+| 任意 | `user` | 任意 | 201，完全不受限 |
 
-#### 5.5.3 工具描述要求
+错误文案必须一次给出两条可行路径：① 先 `PATCH status=in_progress` 再写评论；② 本次评论直接带 `status=in_progress`。
+两条都写清，AI 才不会卡在这里反复重试。
 
-`comment_add` 与 `ticket_update` 的 MCP 工具 description 必须写明：「处理完务必把 status 推进到 in_progress / done；状态不是装饰，用户靠它看看板。」
+**唯一实现**：硬门写在 `src/repo/comments.js` 的 `create()` 里。REST `POST /api/tickets/:id/comments`
+与 MCP `comment_add` 最终都调它，所以只有一份规则，不存在两边行为漂移。
+
+#### 5.5.3 评论与状态原子提交
+
+`POST /api/tickets/:id/comments` 与 MCP `comment_add` 都接受可选 `status`：
+
+```
+POST /api/tickets/:id/comments
+{ "body": "做完了", "status": "done" }     // status 可选，省略就只写评论
+```
+
+- 评论 INSERT 与状态 UPDATE 在**同一个事务**里：状态非法（`TRANSITION_INVALID` / `STATUS_INVALID`）
+  就整条回滚，评论也不落库 —— 不允许出现「评论写成功、状态没跟上」的半截状态
+- 状态迁移照样走 5.5.1 的迁移表，不另造一套规则
+- 改成 `done` / `cancelled` 时，同一次 UPDATE 里把认领四列置 NULL（沿用 3.2.1 的自动释放）
+- **这是「已完成」的唯一可靠通道**：AI 显式写 `status=done` 才 done，不做词表猜测
+
+#### 5.5.4 读侧漏网标记（只标记，不改数据）
+
+列表纯文本（4.2）里，三种漏网都要标出来。**按原因分档，一个档一行**，都放在 `# end.` 之前：
+
+| 档位 | 触发条件 | 追加行 |
+|---|---|---|
+| done | `in_progress` / `reopened` 且**最后一条 AI 评论**命中完工词 | `# 待办: <refs> 可能漏了 status=done（评论像是完工报告，状态还没改成已完成）。确认做完就调 ticket_update status=done（若是 reopened 的单，先改 in_progress 再改 done）` |
+| in_progress | `open` 且**有任何** AI 评论 | `# 待办: <refs> 漏了 status=in_progress（AI 已经在上面写过评论，状态还停在打开）。开始处理了就调 ticket_update status=in_progress` |
+
+```
+# 待办: demo-project#12 demo-project#15 可能漏了 status=done（…）
+# 待办: demo-project#18 漏了 status=in_progress（…）
+```
+
+**为什么 open 档单独一档**：用户最初抱怨的正是这一类 ——「你说做好了，但没看到你做成功啊，
+16 个还是打开状态」。AI 明明在 open 单上留了评论（干过活了），状态却还停在打开。
+它也是 `in_progress → open`（契约 5.5.1 允许）被合法挪回去之后的形态，光看状态字段看不出问题。
+
+**为什么两档不混排**：混在一行里就说不清哪张该补 done、哪张该补 in_progress，而「补错状态」比「不提醒」更糟。
+
+其它规则：
+
+- 完工词表（中文）：`已完成 / 搞定了 / 已修复 / 已解决 / 修好了`，且必须出现在**句首、行首**，
+  或作为完工标题（`## 完成情况` / `## 做完的动作` / `## 验收结果`）
+- **不含裸英文 `done` / `fixed` / `resolved`**：在这个项目里它们几乎总是在讨论状态值本身
+  （`done → reopened`、`status=done`、`done=circle-check`）或 CSS 的 `position: fixed`，不是完工声明。
+  拿真实库 41 条 AI 评论量过：带裸英文词命中 14 条，其中 6 条是这种元文本（**误报 43%**）；
+  只留中文词并要求出现在句首/行首后命中 7 条，全部是真完工报告。宁可少报（漏了下轮读列表还能看见），
+  不可乱报 —— 乱报的提醒会和被废掉的 `statusHint` 一样被无视
+- **只用于标记，绝不触发状态变更**：词表猜错会改坏数据，漏判只是少提醒一次，下一轮读列表还能看见
+- 只看最后一条 **AI** 评论，不看最后一条评论：用户事后追一句「收到」不该把 AI 的完工报告盖掉；
+  AI 说完「已修复」又补一句「又发现边界问题」时，确实不该再催它收尾
+- `done` / `cancelled` 单一律不标（状态已经到位）
+- 某档没有命中时，那一行不输出（不浪费 token）
+
+#### 5.5.5 工具描述要求
+
+`comment_add` 的 description 必须写明：工单还是「打开」时 AI 必须先表态（先 `ticket_update status=in_progress`，
+或本次评论直接带 `status=in_progress`）；干完了就在写评论时带 `status=done`。
+`ticket_update` 的 description 必须写明「处理完务必把 status 推进到 in_progress / done；状态不是装饰，用户靠它看看板」。
+
+#### 5.5.6 锁定提醒（与状态规则无关，独立一条）
+
+写操作（`ticket_create` / `ticket_update` / `comment_add` 等）的纯文本返回里，若工单被**他人**认领且未过期，
+在 `# end.` 之前追加一行（`claimLockHint`）：
+
+```
+# 锁定提醒: 该工单已被 ai:other (model) 于 <claimed_at> 认领，请勿修改或评论
+```
+
+自己认领的、以及 `role=user` 的调用都不提醒（用户是老板，不受锁约束）。读操作不追加。
 
 ---
 
