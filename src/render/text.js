@@ -154,6 +154,22 @@ export function statusHint({ status, event, body = '', actorRole = 'ai' } = {}) 
   return null;
 }
 
+/**
+ * 锁定提醒（契约 5.5.2）。为什么要有它：AI 读列表时该看到「这张被别人占了」，
+ * 而不是动手改到一半被 409 顶回来。这条提醒只在写操作的返回里出现，读操作不打扰。
+ * @param {object} ticket 含 assignee_* 与 claimed_at
+ * @param {{id:string, role:'user'|'ai'}} actor 本次调用者
+ * @returns {string|null}
+ */
+export function claimLockHint(ticket, actor) {
+  if (!ticket || !ticket.assignee_id) return null;
+  // 自己占的不提醒；用户是老板，不受锁约束，也不用提醒
+  if (actor && actor.role === 'user') return null;
+  if (actor && ticket.assignee_id === actor.id && ticket.assignee_role === actor.role) return null;
+  const who = actorLabel(ticket.assignee_id, ticket.assignee_role, ticket.assignee_model);
+  return `# 锁定提醒: 该工单已被 ${who} 于 ${ticket.claimed_at} 认领，请勿修改或评论`;
+}
+
 /** 单张工单纯文本（契约 4.3） */
 export function renderTicket(ticket, { maxlen = 0, workspace, hint = null, baseUrl = '' } = {}) {
   const ws = workspace || { slug: ticket.workspace_slug, path: ticket.workspace_path };
@@ -187,8 +203,10 @@ export function renderTicket(ticket, { maxlen = 0, workspace, hint = null, baseU
     }
   }
 
-  // 提醒行放在 # end. 之前，同一个 # 前缀，保持纯文本一致性
-  if (hint) lines.push('', hint);
+  // 提醒行放在 # end. 之前，同一个 # 前缀，保持纯文本一致性。
+  // 状态提醒与锁定提醒是两条独立规则，可能同时命中，各自一行、中间空一行（契约 5.5.2）。
+  const hints = (Array.isArray(hint) ? hint : [hint]).filter(Boolean);
+  for (const h of hints) lines.push('', h);
   const base = baseUrl ? baseUrl.replace(/\/+$/, '') : '';
   lines.push(
     '',

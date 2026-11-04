@@ -56,7 +56,7 @@ export function resolveActor(req, body, query) {
     throw new HttpError(
       400,
       'ACTOR_REQUIRED',
-      'role=ai 时必须同时提供 actor id 与 model（如 dsh-lead / group/cherish-ai）',
+      'role=ai 时必须同时提供 actor id 与 model',
     );
   }
   return { id, role: 'ai', model };

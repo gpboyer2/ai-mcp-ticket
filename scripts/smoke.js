@@ -14,7 +14,9 @@
 //
 // 每条断言都打印 ✔/✘ 与耗时；任何一条失败 → 汇总后以非 0 退出。
 import process from 'node:process';
+import path from 'node:path';
 import { resolvePort } from '../src/port.js';
+import { DEFAULT_DB_PATH } from '../src/db.js';
 
 const BASE = (
   process.env.BASE || `http://127.0.0.1:${resolvePort(process.env.PORT)}`
@@ -25,6 +27,8 @@ const AI_MODEL = process.env.SMOKE_ACTOR_MODEL || 'deepseek-v4.1';
 // ---------- 结果记录 ----------
 const results = [];
 let failed = 0;
+// healthz 报出来的真实 db 路径，供「别打穿真实库」护栏判定
+let aliveDb = '';
 
 /** 跑一个步骤：自动计时、打印 ✔/✘，失败时记录原因（不中断，跑完统一汇总） */
 async function step(name, fn) {
@@ -116,10 +120,27 @@ async function main() {
     const r = await api('/healthz');
     mustEq(r.status, 200, 'HTTP 状态码');
     must(r.json?.ok === true, 'healthz 的 ok 必须是 true');
+    aliveDb = String(r.json.db || '');
     return `v${r.json.version} db=${r.json.db}`;
   });
   if (!alive) {
     console.log('\n实例不可达，后续步骤全部跳过。请先 npm start。\n');
+    return summarize();
+  }
+
+  // 0.5 护栏：冒烟会真的建单、改单、删单。打在用户的真实库上会留下痕迹、并搅动真实数据。
+  // 判据取 healthz 报的 db 路径，而不是靠人记得传对端口 —— 传错端口正是踩过的坑。
+  // 真实例冒烟是发布前该做的事，所以不禁止，但要显式确认（SMOKE_ALLOW_REAL_DB=1）。
+  const targetDb = String(aliveDb || '');
+  const projectDb = path.resolve(DEFAULT_DB_PATH);
+  if (targetDb && path.resolve(targetDb) === projectDb && !process.env.SMOKE_ALLOW_REAL_DB) {
+    console.log(
+      `\n✘ 冒烟会写数据，但目标是真实库：\n    ${targetDb}\n\n` +
+        '  确实要对着真实例冒烟（发布前验证），加环境变量再跑：\n' +
+        '    SMOKE_ALLOW_REAL_DB=1 node scripts/smoke.js\n' +
+        '  只想自测，请另起临时库实例（DB_PATH=临时路径 PORT=自选端口），再用 PORT= 指过来。\n',
+    );
+    process.exitCode = 1;
     return summarize();
   }
 
@@ -272,7 +293,7 @@ async function main() {
     return `${r.result.serverInfo.name} v${r.result.serverInfo.version}`;
   });
 
-  await step('MCP tools/list 恰好 10 个工具且名字符合契约第 5 节', async () => {
+  await step('MCP tools/list 恰好 12 个工具且名字符合契约第 5 节', async () => {
     const r = await mcp({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
     const names = (r.result?.tools || []).map((t) => t.name).sort();
     const expected = [
@@ -280,14 +301,16 @@ async function main() {
       'comment_delete',
       'comment_list',
       'comment_update',
+      'ticket_claim',
       'ticket_create',
       'ticket_delete',
       'ticket_get',
       'ticket_list',
+      'ticket_release',
       'ticket_update',
       'workspace_list',
     ];
-    mustEq(names.length, 10, '工具数量');
+    mustEq(names.length, 12, '工具数量');
     mustEq(names.join(','), expected.join(','), '工具名集合');
     return names.join(', ');
   });
@@ -386,7 +409,9 @@ function summarize() {
     for (const r of results.filter((x) => !x.ok)) console.log(`  ✘ ${r.name}\n      ${r.error}`);
   }
   console.log('─'.repeat(64) + '\n');
-  process.exitCode = failed ? 1 : 0;
+  // 退出码只在这里定，且不覆盖调用方已设过的非 0（例如护栏拒绝跑）。
+  // 原来无条件写 `failed ? 1 : 0`，会把「被拦住没跑」洗成「跑完全绿」，CI 假通过。
+  process.exitCode = failed || process.exitCode ? 1 : 0;
   return failed === 0;
 }
 

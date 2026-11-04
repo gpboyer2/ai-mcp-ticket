@@ -11,14 +11,9 @@
   let listEl = null;
   let rootEl = null;
 
-  // 每个状态用对应的 Lucide 图标 + 数字，颜色取状态色
+  // 计数一律走 T.statusCounts（五个状态固定占位、为 0 也显示 0）
   function countsHtml(c) {
-    const n = T.normalizeCounts(c);
-    const parts = T.STATUS.filter(function (st) { return n[st.key]; }).map(function (st) {
-      return '<i class="ws-count" style="color:' + st.color + '" title="' + T.esc(st.label) + ' ' + n[st.key] + '">' +
-        window.icon(st.icon, 10) + '<b>' + n[st.key] + '</b></i>';
-    });
-    return parts.length ? parts.join('') : '<i class="ws-count">0</i>';
+    return T.statusCounts(c);
   }
 
   function render() {

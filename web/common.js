@@ -2,7 +2,7 @@
    common.js —— 全局公共能力（v2 单页三栏版）
    1) 主题（深浅色，localStorage 记忆，默认跟随系统）
    2) REST API（写请求一律带 X-Actor-Role: user）
-   3) 通用 UI：toast、弹窗、右键菜单、AI 视角抽屉
+   3) 通用 UI：toast、弹窗、右键菜单、Agents 视角抽屉
    4) 卡片预览：工单只有 content 一个内容字段，卡片只取它的第一行
    5) 全局状态 store 与页面间广播
    ========================================================================== */
@@ -175,6 +175,20 @@
     const key = STATUS_LABEL[s] ? s : 'open';
     return '<span class="dot" style="color:' + STATUS_COLOR[key] + '">' +
       window.icon(STATUS_ICON[key], 13) + '</span>';
+  }
+  // 侧栏工作区行的那排计数：五个状态一律占位，为 0 也显示 0。
+  // 为什么不做「有值才显示」：那样每行颜色个数和位置都不一样，扫一眼对不上号。
+  // 顺序：蓝(打开) → 橙(处理中) → 绿(已完成) → 紫(重新打开) → 灰(已取消)。
+  // 用户要的是「第一个蓝、中间橙、后面绿」这三个最常看的色固定不动，
+  // 少见的紫和灰排在最后。这是计数的专属顺序，看板列的顺序另算（那里紫在绿前面）。
+  const COUNT_ORDER = ['open', 'in_progress', 'done', 'reopened', 'cancelled'];
+  function statusCounts(c) {
+    const n = normalizeCounts(c);
+    return COUNT_ORDER.map(function (key) {
+      return '<i class="ws-count" style="color:' + STATUS_COLOR[key] + '" title="' +
+        esc(STATUS_LABEL[key]) + ' ' + n[key] + '">' +
+        window.icon(STATUS_ICON[key], 10) + '<b>' + n[key] + '</b></i>';
+    }).join('');
   }
   function depsList(blockedBy) {
     return String(blockedBy || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean);
@@ -363,12 +377,12 @@
   });
   document.addEventListener('scroll', closeMenus, true);
 
-  /* ---------------- AI 视角抽屉（#53） ----------------
+  /* ---------------- Agents 视角抽屉（#53） ----------------
      用户要求（原话要点）：
        · 本项目是开源的，陌生用户装好 MCP 后**没有我们的 docs**，所以文案里绝不能提 docs/CONTRACT.md
        · URL 必须带完整 host（动态取 location.origin），不能只给 /xxx/list 这种半截路径
        · status 不能只写 open，要把 in_progress,reopened 一起写出来
-       · 站在「全新、陌生的 AI 和用户」的视角 —— 贴过去就能用，不用再问人
+       · 站在「全新、陌生的 Agent 和用户」的视角 —— 贴过去就能用，不用再问人
      ------------------------------------------------------------------ */
 
   // 保持向前兼容 textUrlFor 契约
@@ -447,7 +461,7 @@
         '<button class="icon-btn" data-act="close" title="关闭" aria-label="关闭">' +
           window.icon('x', 16) + '</button>' +
       '</div>' +
-      '<h2>AI 视角</h2>' +
+      '<h2>Agents 视角</h2>' +
       '<p class="ai-lead">这个系统所有页面都有一个「纯文本版本」：同一个地址，把 <code>.txt</code> 加在路径末尾（或加 <code>?format=text</code>），' +
         '返回的就是没有 HTML 标签的纯文本。把下面的 URL 直接贴给任何 AI，它就能读懂并操作，不需要额外文档。</p>' +
 
@@ -619,7 +633,7 @@
     STEP: STEP, PREVIEW_MAX: PREVIEW_MAX,
     api: api, API: API,
     esc: esc, fmtTime: fmtTime, timeTag: timeTag, priorityPill: priorityPill,
-    statusBadge: statusBadge, statusDot: statusDot, depsList: depsList,
+    statusBadge: statusBadge, statusDot: statusDot, statusCounts: statusCounts, depsList: depsList,
     actorText: actorText, truncate: truncate, debounce: debounce, lastComment: lastComment,
     cardPreview: cardPreview,
     toast: toast, toastWithAction: toastWithAction,

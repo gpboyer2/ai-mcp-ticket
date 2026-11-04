@@ -53,8 +53,8 @@
         '<button class="btn sm" id="sync-btn" title="从 DeepSeek Harness 重新同步工作区">' +
           window.icon('refresh-cw', 15) + '<span>同步</span></button>' +
         '<button class="btn sm icon-only" id="theme-btn" title="切换深浅色" aria-label="切换深浅色"></button>' +
-        '<button class="btn sm" id="ai-btn" title="AI 视角：当前状态的纯文本 URL">' +
-          window.icon('bot', 15) + '<span>AI 视角</span></button>' +
+        '<button class="btn sm" id="ai-btn" title="Agents 视角：当前状态的纯文本 URL">' +
+          window.icon('bot', 15) + '<span>Agents 视角</span></button>' +
       '</div>' +
       '<div class="main">' +
         '<aside class="sidebar" id="sidebar"></aside>' +
@@ -85,12 +85,14 @@
       selectWorkspace(null);
     });
 
-    // 窄屏抽屉 / 浮层
+    // 遮罩只服务于左栏抽屉（窄屏）。详情面板不再挂遮罩：
+    // 遮罩会盖住整个中栏，点看板任何位置都只打到遮罩上，卡片那一下点击永远收不到，
+    // 于是必须先点一次关详情、再点一次才切得动工单。详情关不关由 detail.js 的
+    // 「点面板外面」负责，那一次 pointerdown 不会吞掉随后的 click。
     document.getElementById('bar-hamburger').addEventListener('click', toggleMobileSidebar);
     document.getElementById('scrim').addEventListener('click', function () {
       document.getElementById('sidebar').classList.remove('open');
       document.getElementById('scrim').classList.remove('on');
-      if (window.innerWidth <= 1100 && Detail.isOpen()) closeDetail();
     });
 
     // 三栏联动事件
@@ -99,11 +101,13 @@
     T.on('ticket:open', function (t) { openTicket(t.seq); });
     T.on('ticket:open-seq', openTicket);
     T.on('detail:close', closeDetail);
+    // 详情开/关只改卡片高亮，不重建卡片 DOM：否则点详情外面时，正在按的那张卡片
+    // 会被重绘销毁，这次 click 就丢了，用户得点两下才能切工单。
     T.on('detail:closed', function () {
       pushUrl(S.ws, null);
-      Board.renderColumns();
+      Board.markActive(null);
     });
-    T.on('detail:rendered', function () { Board.renderColumns(); });
+    T.on('detail:rendered', function () { Board.markActive(S.detailSeq); });
     T.on('board:filter', function () { loadTickets(); });
     // #61：reload 完成后要回调（新建工单后滚动定位靠它）
     T.on('board:reload', function (done) { loadTickets(done); });
@@ -252,15 +256,13 @@
     if (!seq) return;
     S.detailSeq = seq;
     pushUrl(S.ws, seq);
-    Board.renderColumns(); // 高亮当前卡
+    Board.markActive(seq); // 高亮当前卡（只换类名，不重建卡片）
     await Detail.load(S.ws, seq);
-    if (window.innerWidth <= 1100) document.getElementById('scrim').classList.add('on');
   }
 
   function closeDetail() {
     S.detailSeq = null;
     Detail.close();
-    if (window.innerWidth <= 1100) document.getElementById('scrim').classList.remove('on');
   }
 
   /* ---------------- 启动 + 前进后退 ---------------- */
@@ -287,9 +289,8 @@
     await loadTickets();
 
     if (route.seq) {
-      Board.renderColumns();
+      Board.markActive(route.seq);
       await Detail.load(route.ws, route.seq);
-      if (window.innerWidth <= 1100) document.getElementById('scrim').classList.add('on');
     } else {
       Detail.close();
     }

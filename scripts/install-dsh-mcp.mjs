@@ -20,13 +20,16 @@
 import { readFileSync, writeFileSync, copyFileSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { resolvePort } from '../src/port.js';
 
 const DSH_HOME = process.env.DSH_HOME || join(homedir(), '.dsh');
 const PROFILE = process.env.DSH_PROFILE || 'desktop';
 const PATCH_PATH = join(DSH_HOME, 'profiles', PROFILE, 'cordis.patch.yml');
 
-// 固定端口，与 src/server.js 的默认值保持一致
-const PORT = Number(process.env.PORT || 47321);
+// 端口取自 src/port.js 的单一常量，不在这里另写一个数（写死过 47321，改默认值时会漂移）。
+// 用 resolvePort 而不是 `Number(env.PORT || 默认)`：后者会把 PORT=0 静默变成默认端口，
+// 正是本项目踩过两次的事故写法。
+const PORT = resolvePort(process.env.PORT);
 const SERVER_NAME = 'ticket'; // DSH 里显示成 mcp__ticket__<tool>
 const ROW_ID = 'ai-mcp-ticket';
 const MARK = '# ai-mcp-ticket';

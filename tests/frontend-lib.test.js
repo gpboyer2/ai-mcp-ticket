@@ -1,4 +1,4 @@
-// 前端纯函数单测（契约 1.3 的卡片预览、AI 视角 URL 生成）。
+// 前端纯函数单测（契约 1.3 的卡片预览、Agents 视角 URL 生成）。
 // 为什么能在 node 里测：web/common.js 是个 IIFE，只依赖 window/document/localStorage，
 // 用最小 stub 顶掉这几个全局就能加载，然后把挂到 window.TT 上的纯函数拿出来直接断言。
 // 这比"看代码觉得没问题"可靠得多 —— 这些函数一错，卡片上显示的内容就会错位或丢字。
@@ -49,6 +49,8 @@ function loadCommon() {
     innerHeight: 900,
     addEventListener: noop,
     removeEventListener: noop,
+    // statusCounts 会调 window.icon；真实实现在 icons.js 里，这里只要占位即可
+    icon: (name, size) => '<svg data-icon="' + name + '" data-size="' + size + '"></svg>',
   };
   const localStorage = {
     getItem: (k) => (store.has(k) ? store.get(k) : null),
@@ -122,7 +124,7 @@ test('cardPreview：超过 80 字截断并加省略号（卡片一行放不下�
   assert.equal([...cn.replace('…', '')].length, 80, '中文 81 字应截到 80 字');
 });
 
-test('textUrlFor（契约 6.5 AI 视角）：生成带 ?format=text 的可复制 URL', () => {
+test('textUrlFor（Agents 视角）：生成带 ?format=text 的可复制 URL', () => {
   // 真实调用签名是 textUrlFor(pathname, search, useLanHint)，pathname 与 search 分开传
   assert.equal(
     TT.textUrlFor('/demo-project/list', ''),
@@ -138,10 +140,10 @@ test('textUrlFor（契约 6.5 AI 视角）：生成带 ?format=text 的可复制
   // 已带 format=text 不重复加（URLSearchParams.set 天然幂等）
   const already = TT.textUrlFor('/demo-project/list', '?format=text');
   assert.equal((already.match(/format=/g) || []).length, 1, 'format 参数不能重复');
-  // maxlen 会被删掉：AI 视角要的是完整内容
+  // maxlen 会被删掉：Agents 视角要的是完整内容
   assert.ok(
     !TT.textUrlFor('/demo-project/list', '?maxlen=50').includes('maxlen'),
-    'AI 视角 URL 应去掉 maxlen（否则 AI 只拿到截断内容）',
+    'Agents 视角 URL 应去掉 maxlen（否则 Agent 只拿到截断内容）',
   );
   // 单工单页
   assert.equal(
@@ -188,6 +190,29 @@ test('normalizeCounts：counts 缺字段时补 0，total 能算出来', () => {
   }
 });
 
+test('statusCounts：五个状态固定占位，颜色顺序固定为 蓝橙绿紫灰', () => {
+  // 侧栏每一行都渲染同样五个格子，为 0 也显示 0。
+  // 这样行与行之间颜色位置对得上，不会出现「这一行第一个是橙、那一行第一个是绿」。
+  const html = TT.statusCounts({ open: 3, in_progress: 1, done: 18 });
+  const colors = [...html.matchAll(/color:([^"]+)/g)].map((m) => m[1]);
+  assert.deepEqual(colors, [
+    'var(--st-open)',
+    'var(--st-in_progress)',
+    'var(--st-done)',
+    'var(--st-reopened)',
+    'var(--st-cancelled)',
+  ], '颜色顺序必须是 蓝(打开) → 橙(处理中) → 绿(已完成) → 紫(重新打开) → 灰(已取消)');
+
+  // 每个格子都要有数字，0 也照样渲染出来
+  const nums = [...html.matchAll(/<b>(\d+)<\/b>/g)].map((m) => m[1]);
+  assert.deepEqual(nums, ['3', '1', '18', '0', '0'], '缺的状态要显示 0，不能整格消失');
+
+  // counts 完全没给：五格仍然在，全是 0（不能因为没数据就退回一个孤零零的 0）
+  const empty = TT.statusCounts(null);
+  assert.equal([...empty.matchAll(/<b>(\d+)<\/b>/g)].length, 5, '没数据时也必须是五格');
+  assert.ok(!empty.includes('NaN'), '没数据时不能出现 NaN');
+});
+
 test('esc：HTML 转义覆盖五种字符（XSS 防线）', () => {
   assert.equal(TT.esc('<script>alert(1)</script>'), '&lt;script&gt;alert(1)&lt;/script&gt;');
   assert.equal(TT.esc('a & b'), 'a &amp; b');
@@ -211,4 +236,15 @@ test('window.TT 导出的 API 覆盖前端所有被引用的方法（防止改�
   assert.deepEqual(missing, [], `这些方法被前端引用但没从 window.TT 导出：${missing.join(', ')}`);
   // 导出数量兜底：少于 30 个说明导出块被删了
   assert.ok(exported.length >= 30, `window.TT 应导出至少 30 个成员，实际 ${exported.length}`);
+});
+
+test('产品名口径：顶栏按钮与抽屉标题叫「Agents 视角」，不再出现「AI 视角」（ai-剧本#60）', () => {
+  // 为什么值得断言：产品名叫「Agents 工单」，入口按钮却叫「AI 视角」会让用户以为这是给模型看的调试面板。
+  // 文案散在 app.js 与 common.js 两处，改名时漏一处，界面上就会新旧并存。
+  const app = fs.readFileSync(path.join(WEB, 'app.js'), 'utf8');
+  const common = fs.readFileSync(path.join(WEB, 'common.js'), 'utf8');
+  for (const [name, src] of [['app.js', app], ['common.js', common]]) {
+    assert.ok(src.includes('Agents 视角'), `${name} 里应出现「Agents 视角」`);
+    assert.ok(!src.includes('AI 视角'), `${name} 里不应再有「AI 视角」`);
+  }
 });

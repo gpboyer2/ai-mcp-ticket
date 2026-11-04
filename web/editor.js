@@ -43,9 +43,9 @@
         '<label>依赖的工单（可搜索、可多选）</label>' +
         '<div id="deps-mount"></div>' +
       '</div>' +
-      // #58：编辑已有工单时，直接给这张工单的 AI 纯文本 URL
+      // #58：编辑已有工单时，直接给这张工单的 Agents 纯文本 URL
       (t && t.seq ? '<div class="field">' +
-        '<label>这张工单的 AI 纯文本地址</label>' +
+        '<label>这张工单的 Agents 纯文本地址</label>' +
         '<div class="ai-url-row">' +
           '<code class="ai-url-inline" id="editor-ai-url">' + T.esc(T.ticketTextUrl(ws, t.seq)) + '</code>' +
           '<button class="btn sm" id="editor-copy-ai" type="button">' +

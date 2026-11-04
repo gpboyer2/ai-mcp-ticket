@@ -180,7 +180,7 @@
               T.esc(p.label) + '</option>';
           }).join('') +
         '</select>' +
-        '<button class="btn sm" id="d-copy-ai" type="button" title="复制这张工单的 AI 纯文本 URL">' +
+        '<button class="btn sm" id="d-copy-ai" type="button" title="复制这张工单的 Agents 纯文本 URL">' +
           window.icon('copy', 13) + '<span>AI URL</span></button>' +
         '<button class="btn sm" id="d-edit" type="button">' +
           window.icon('pencil', 13) + '<span>编辑</span></button>' +
@@ -323,7 +323,7 @@
       }
     });
 
-    // #58：复制这张工单的 AI 纯文本 URL
+    // #58：复制这张工单的 Agents 纯文本 URL
     const copyAiBtn = document.getElementById('d-copy-ai');
     if (copyAiBtn) {
       copyAiBtn.addEventListener('click', async function () {

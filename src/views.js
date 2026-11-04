@@ -1,7 +1,7 @@
 // 纯文本视图的统一装配：查工单 → 挂评论 → 渲染。
 // REST /api/workspaces/:ws/text、页面 /{ws}/list、MCP ticket_list 三处共用同一份，
 // 否则同一份列表在三处会各自漂移（谁挂了评论、谁漏了截断，很快对不上）。
-import { renderTicket, renderTicketList, statusHint } from './render/text.js';
+import { renderTicket, renderTicketList, statusHint, claimLockHint } from './render/text.js';
 import { parseStatusFilter } from './repo/workspaces.js';
 import { HttpError } from './actor.js';
 
@@ -64,19 +64,22 @@ export function listTextView(ctx, ws, query = {}, { baseUrl = '' } = {}) {
 /**
  * 单张工单纯文本（契约 4.3），补上 workspace path。
  * @param {object} [opts]
- * @param {{event:string, body?:string, actorRole?:string}} [opts.writeEvent]
- *   本次是写操作时传入，用于在末尾追加状态提醒（契约 5.5.2）；读操作不要传。
+ * @param {{event:string, body?:string, actorRole?:string, actor?:object}} [opts.writeEvent]
+ *   本次是写操作时传入，用于在末尾追加状态提醒与锁定提醒（契约 5.5.2）；读操作不要传。
  */
 export function ticketTextView(ctx, ws, ticket, { writeEvent, baseUrl = '' } = {}) {
   const full = ctx.tickets.get(ticket.id);
   full.workspace_path = ws ? ws.path : '';
   const hint = writeEvent
-    ? statusHint({
-        status: full.status,
-        event: writeEvent.event,
-        body: writeEvent.body,
-        actorRole: writeEvent.actorRole,
-      })
+    ? [
+        statusHint({
+          status: full.status,
+          event: writeEvent.event,
+          body: writeEvent.body,
+          actorRole: writeEvent.actorRole,
+        }),
+        claimLockHint(full, writeEvent.actor),
+      ]
     : null;
   return renderTicket(full, { workspace: ws, hint, baseUrl });
 }

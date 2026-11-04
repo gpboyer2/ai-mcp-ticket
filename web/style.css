@@ -552,7 +552,7 @@ html[data-theme="dark"] .deps-list { box-shadow: 0 12px 32px rgba(0, 0, 0, .5), 
 .menu button:hover { background: var(--bg-soft); }
 .menu button.danger { color: var(--danger); }
 
-/* ---------- AI 视角抽屉 ---------- */
+/* ---------- Agents 视角抽屉 ---------- */
 .drawer {
   position: fixed;
   top: 0;
@@ -791,7 +791,7 @@ html[data-theme="dark"] .deps-list { box-shadow: 0 12px 32px rgba(0, 0, 0, .5), 
 .body-text { white-space: pre-wrap; }
 
 /* ==========================================================================
-   AI 视角抽屉（#53）：给陌生 AI 看的说明书
+   Agents 视角抽屉（#53）：给陌生 Agent 看的说明书
    ========================================================================== */
 .ai-drawer { width: min(560px, 100%); }
 .ai-drawer h2 { font-size: 16px; margin-bottom: 2px; }

@@ -1,24 +1,22 @@
 # ai-mcp-ticket
 
-**给 AI 看的工单系统：人在网页上拖拽看板，AI 用 `Accept: text/plain` 直接读纯文本 —— 不是 JSON，不烧 token。**
+**给 Agents 看的工单系统：人在网页上拖拽看板，Agent 用 `Accept: text/plain` 直接读纯文本 —— 不是 JSON，不烧 token。**
 
-单进程、单文件 SQLite，无 Docker、无 Postgres、无构建步骤。`npm start` 就有看板 + REST + MCP 三套接口，人和 AI 读写同一份数据。
+单进程、单文件 SQLite，无 Docker、无 Postgres、无构建步骤。`npm start` 就有看板 + REST + MCP 三套接口，人和 Agent 读写同一份数据。
 
 [![CI](https://github.com/gpboyer2/ai-mcp-ticket/actions/workflows/ci.yml/badge.svg)](https://github.com/gpboyer2/ai-mcp-ticket/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](https://nodejs.org)
-[![MCP](https://img.shields.io/badge/MCP-10%20tools-blueviolet)](docs/CONTRACT.md)
-[![tests](https://img.shields.io/badge/tests-99%20passing-success)](#测试)
+[![MCP](https://img.shields.io/badge/MCP-12%20tools-blueviolet)](docs/CONTRACT.md)
+[![tests](https://img.shields.io/badge/tests-123%20passing-success)](#测试)
 [![smoke](https://img.shields.io/badge/smoke-17%20passing-success)](#测试)
 [![no build](https://img.shields.io/badge/build-none-informational)](#为什么不塞个-postgres)
 
-> **In English:** A ticket system where humans get a drag-and-drop kanban in the browser, while AI agents read the *same* tickets as plain text via `Accept: text/plain` or 10 MCP tools — no JSON bloat. One Node process, one SQLite file, zero build step. Workspaces auto-sync from DeepSeek Harness.
+> **In English:** A ticket system where humans get a drag-and-drop kanban in the browser, while Agents read the *same* tickets as plain text via `Accept: text/plain` or 12 MCP tools — no JSON bloat. One Node process, one SQLite file, zero build step. Workspaces auto-sync from DeepSeek Harness.
 
-![看板：人在浏览器拖拽，AI 在评论里留痕](docs/screenshots/board.png)
+界面是**左边**工作区目录、**中间**五列看板（拖拽换列 / 列内排序）、**右边**工单详情 —— 全程单页不跳转。评论区分 `user` 与 `ai` 并标出模型名，Agent 留过痕的卡片一眼可辨。
 
-**左边**工作区目录，**中间**五列看板（拖拽换列 / 列内排序），**右边**工单详情 —— 全程单页不跳转。评论区分 `user` 与 `ai` 并标出模型名，AI 留过痕的卡片一眼可辨。
-
-> 截图取自演示数据（`scripts/demo-data.mjs` 造的 `demo-project` 工作区），不含任何真实项目信息；提交前用 `scripts/check-screenshots.sh` 做过 OCR 核对。
+> **本仓库不带截图**：`docs/screenshots/` 已在 `.gitignore` 里，图里容易带出本机路径和真实工单内容。想看界面就跑 `npm start` 自己看，或用 `scripts/demo-data.mjs` 造一份 `demo-project` 演示数据（不含任何真实项目信息）。
 
 ---
 
@@ -28,7 +26,7 @@
 - [为什么不用现成的](#为什么不塞个-postgres)
 - [功能对比](#功能对比)
 - [Quick Start](#quick-start)
-- [给 AI 的纯文本视图](#给-ai-的纯文本视图)
+- [给 Agents 的纯文本视图](#给-agents-的纯文本视图)
 - [接进 DeepSeek Harness](#接进-deepseek-harness)
 - [MCP 工具](#mcp-工具)
 - [人机同一份数据](#人机同一份数据)
@@ -41,15 +39,15 @@
 
 ## 这是什么
 
-**痛点**：你让 AI 帮你干活，得先告诉它「要做什么」。这些上下文散在聊天记录里，一开新会话就没了；你想看看 AI 到底干到哪一步，只能在对话框里往上翻。
+**痛点**：你让 Agent 帮你干活，得先告诉它「要做什么」。这些上下文散在聊天记录里，一开新会话就没了；你想看看 Agent 到底干到哪一步，只能在对话框里往上翻。
 
-**这个项目**：一个真实的工单看板。你在浏览器里拖卡片、写评论；AI 通过 MCP 工具或一个 URL 读同一批工单、改状态、回评论。工单成了人和 AI 之间的**共享状态**，不再是聊天记录里的一段话。
+**这个项目**：一个真实的工单看板。你在浏览器里拖卡片、写评论；Agent 通过 MCP 工具或一个 URL 读同一批工单、改状态、回评论。工单成了人和 Agent 之间的**共享状态**，不再是聊天记录里的一段话。
 
-**给谁用**：让 AI 参与开发的个人开发者 / 小团队，尤其是已经在用 [DeepSeek Harness](https://github.com/deepseek-ai) 或类似 MCP 宿主的人 —— 工作区会自动同步过来，零配置。
+**给谁用**：让 Agent 参与开发的个人开发者 / 小团队，尤其是已经在用 [DeepSeek Harness](https://github.com/deepseek-ai) 或类似 MCP 宿主的人 —— 工作区会自动同步过来，零配置。
 
-### 核心取舍：给 AI 的是纯文本，不是 JSON
+### 核心取舍：给 Agent 的是纯文本，不是 JSON
 
-市面上所有 MCP 工单系统，工具返回的都是 JSON。AI 每读一次列表，都要为 `{`, `}`, `"id":`, `"created_at":` 这些结构性字符付 token。
+市面上所有 MCP 工单系统，工具返回的都是 JSON。Agent 每读一次列表，都要为 `{`, `}`, `"id":`, `"created_at":` 这些结构性字符付 token。
 
 这里换了个做法 —— 同一批 URL，按请求头决定返回 HTML 还是纯文本：
 
@@ -72,7 +70,7 @@ curl -H 'Accept: text/plain' http://localhost:47321/demo-project/list
 
 同样的数据，MCP 工具 `ticket_list` 返回的也是这段文本（`content: [{type:'text'}]`），**不是 JSON**。渲染只有一份实现（`src/render/text.js`），REST / 网页 / MCP 三处共用，格式不会漂移。
 
-还带 `?maxlen=` 截内容、`?comments=N` 只取最后 N 条 —— 让 AI 自己控制读多少。
+还带 `?maxlen=` 截内容、`?comments=N` 只取最后 N 条 —— 让 Agent 自己控制读多少。
 
 ---
 
@@ -104,12 +102,12 @@ curl -H 'Accept: text/plain' http://localhost:47321/demo-project/list
 | SQLite | ✅ | ✅ | ✅ | ✅ WAL | ✅ Drizzle |
 | 网页拖拽看板 | ✅ | ✅ | ❌ | ✅ | ✅ |
 | 评论线程 | ✅ | ⚠️ 仅 notes | ❌ | ❌ 仅 checklist | ✅ |
-| **AI 读纯文本 URL** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Agent 读纯文本 URL** | ✅ | ❌ | ❌ | ❌ | ❌ |
 | MCP 返回纯文本 | ✅ | ❌ | ❌ | ❌ | ❌ |
 | 无构建步骤 | ✅ | ✅ | ❌ | ✅ | ❌ |
 | 工作区自动同步 | ✅ DSH | ❌ | ❌ | ❌ | ❌ |
 
-**一句话**：唯一同时做到「单进程 + SQLite + 评论 + 拖拽 + AI 纯文本视图」的，是这一行。四个竞品里有三个连 License 文件都没有，法律上不可复用（见 [调研报告](docs/research.md)）。
+**一句话**：唯一同时做到「单进程 + SQLite + 评论 + 拖拽 + Agents 纯文本视图」的，是这一行。四个竞品里有三个连 License 文件都没有，法律上不可复用（见 [调研报告](docs/research.md)）。
 
 ---
 
@@ -131,13 +129,13 @@ npm start
 
 ---
 
-## 给 AI 的纯文本视图
+## 给 Agents 的纯文本视图
 
 同一批 URL，三种方式都能拿到 `text/plain`（命中即返回）：
 
 1. 路径加 `.txt` 后缀 —— `/demo-project/list.txt`
 2. 加查询参数 —— `?format=text`
-3. 请求头 `Accept: text/plain` 排在 `text/html` 之前 —— AI 的 `fetch` 默认就常这样
+3. 请求头 `Accept: text/plain` 排在 `text/html` 之前 —— Agent 的 `fetch` 默认就常这样
 
 | 你要什么 | URL |
 |---|---|
@@ -147,7 +145,7 @@ npm start
 | 只显示最后 3 条评论、内容截 300 字 | `/demo-project/list.txt?comments=3&maxlen=300` |
 | 单张工单全文 | `/demo-project/t/12.txt` |
 
-**日常用法**：在网页上把活拆成工单，然后把 URL 贴给 AI：「读这个 URL，把里面的工单处理掉」。
+**日常用法**：在网页上把活拆成工单，然后把 URL 贴给 Agent：「读这个 URL，把里面的工单处理掉」。
 
 单张工单长这样：
 
@@ -171,11 +169,9 @@ id: 522dee35-8a59-4ab3-bfa4-2b8ceb184145
   顺手把评论按 created_at 升序排了，同毫秒按 rowid。
 ```
 
-注意评论行里的 `user:` 和 `ai:deepseek (deepseek-v4.1)` —— **谁说的、用什么模型说的**，都在文本里。AI 读一眼就知道上一条是用户提的需求还是另一个 AI 的回复。
+注意评论行里的 `user:` 和 `ai:deepseek (deepseek-v4.1)` —— **谁说的、用什么模型说的**，都在文本里。Agent 读一眼就知道上一条是用户提的需求还是另一个 Agent 的回复。
 
-![纯文本视图：同一批数据，AI 读到的就是这段文字](docs/screenshots/plain-text.png)
-
-> 上面那段代码块是真实输出，一字未改；这张图是它在浏览器里打开 `?format=text` 的样子。
+> 上面那段代码块是真实输出，一字未改。想看它在浏览器里打开的样子：在上面这个地址后面加 `.txt`，或用顶栏的「Agents 视角」抽屉复制同义地址。
 
 ---
 
@@ -205,7 +201,7 @@ node scripts/install-dsh-mcp.mjs --remove   # 移除
 
 ## MCP 工具
 
-10 个工具，全部返回纯文本。
+12 个工具，全部返回纯文本。
 
 | 工具 | 作用 |
 |---|---|
@@ -213,12 +209,13 @@ node scripts/install-dsh-mcp.mjs --remove   # 移除
 | `ticket_list` | 工单列表（可按 status / 关键词过滤，控制内容长度与评论条数） |
 | `ticket_get` | 单张工单全文 |
 | `ticket_create` / `ticket_update` / `ticket_delete` | 增 / 改 / 删工单 |
+| `ticket_claim` / `ticket_release` | 认领 / 释放认领（防多会话同时改同一张单） |
 | `comment_list` | 评论列表 |
 | `comment_add` / `comment_update` / `comment_delete` | 评论增 / 改 / 删 |
 
-工单引用形如 `demo-project#12`（工作区 slug + 工作区内自增序号），人和 AI 都好引用。
+工单引用形如 `demo-project#12`（工作区 slug + 工作区内自增序号），人和 Agent 都好引用。
 
-**不允许匿名 AI**：MCP 写操作的 `actor_id` 和 `actor_model` 是必填项，工具描述里写着「填你自己的身份和模型，例如 deepseek-v4.1 。缺任一个直接 400 `ACTOR_REQUIRED`。
+**不允许匿名 Agent**：MCP 写操作的 `actor_id` 和 `actor_model` 是必填项，工具描述只说「由调用方自报写入者标识与模型名」，不给具体名字或模型名当范例。缺任一个直接 400 `ACTOR_REQUIRED`。
 
 ---
 
@@ -229,15 +226,13 @@ node scripts/install-dsh-mcp.mjs --remove   # 移除
 | 角色 | 含义 | 必填 |
 |---|---|---|
 | `user` | 用户本人 | 固定 `id=user`，`model` 为空 |
-| `ai` | 任何 AI | **必须自报 `id` 和 `model`** |
+| `ai` | 任何 Agent | **必须自报 `id` 和 `model`** |
 
-同一个 AI 换了模型，就用新的 `model` 写；历史评论保留当时的 model，不改写。所以回头看一条工单，你能准确知道「这句话是哪个模型在什么时候说的」。
+同一个 Agent 换了模型，就用新的 `model` 写；历史评论保留当时的 model，不改写。所以回头看一条工单，你能准确知道「这句话是哪个模型在什么时候说的」。
 
-![工单详情：user 与 ai 评论分色，AI 那条带 model 标签](docs/screenshots/detail.png)
+详情页是「元信息条 → 工具栏 → 内容 → 评论区」四段式，`user` 与 `ai` 评论分色。评论支持 Markdown，贴图以 `![](/uploads/xxx.png)` 存，纯文本视图里原样保留 URL。
 
-详情页是「元信息条 → 工具栏 → 内容 → 评论区」四段式。评论支持 Markdown，贴图以 `![](/uploads/xxx.png)` 存，纯文本视图里原样保留 URL。
-
-AI 写东西时带这三个头：
+Agent 写东西时带这三个头：
 
 ```bash
 curl -X POST http://localhost:47321/api/tickets/<id>/comments \
@@ -267,10 +262,10 @@ npm run smoke   # 端到端冒烟，对着运行中的实例跑
 没有。默认监听 `0.0.0.0`，同一局域网内任何人都能访问和修改。**只在可信网络里用**，别直接暴露到公网。要上公网，请自己加反向代理和认证。
 
 **多用户 / 多租户？**
-不支持。设计目标是「一个人 + 若干 AI」，单机单用户。角色只有 `user` 和 `ai` 两种，`user` 恒等于你本人。
+不支持。设计目标是「一个人 + 若干 Agent」，单机单用户。角色只有 `user` 和 `ai` 两种，`user` 恒等于你本人。
 
 **依赖有已知漏洞吗？**
-有一个，如实写在这里：依赖 `zod` 3.x，存在已知 **high** 级漏洞 [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5)（校验超大的带约束集合时可能耗尽内存）。修复需升到 zod 4，属破坏性变更（要重写 `src/mcp.js` 里全部 10 个工具的 schema），因此没有混进 v1.0 发布，单独排期处理。
+有一个，如实写在这里：依赖 `zod` 3.x，存在已知 **high** 级漏洞 [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5)（校验超大的带约束集合时可能耗尽内存）。修复需升到 zod 4，属破坏性变更（要重写 `src/mcp.js` 里全部 12 个工具的 schema），因此没有混进 v1.0 发布，单独排期处理。
 实际风险低：本项目 schema 未使用该漏洞所需的 `.min()/.max()` 约束集合组合，且默认只监听内网、无公网暴露。自己跑 `npm audit` 会看到它，这里不藏着。
 
 **上传图片有配额吗？**

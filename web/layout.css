@@ -79,12 +79,14 @@
 .ws-item .ws-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ws-item .ws-mini {
   display: flex;
-  gap: 5px;
+  gap: 4px;
   margin-top: 2px;
   font-size: 10.5px;
   color: var(--muted);
   font-weight: 400;
-  flex-wrap: wrap;
+  /* 五个状态固定占位，必须一行排开：换行会让行与行之间颜色对不齐 */
+  flex-wrap: nowrap;
+  overflow: hidden;
 }
 .ws-item .ws-mini i { font-style: normal; }
 .ws-item .ws-mini i.on { color: var(--accent); }

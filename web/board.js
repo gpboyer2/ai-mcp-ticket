@@ -86,6 +86,17 @@
     }
   }
 
+  // 详情开/关只换卡片高亮，绝不重建卡片 DOM。
+  // 为什么：点详情面板外面会先关详情，如果关的时候整块重绘，用户正按着的那张卡片
+  // 节点会被销毁，浏览器就不再派发这次 click —— 表现成「要连点两下才能切工单」。
+  function markActive(seq) {
+    if (!rootEl) return;
+    const want = seq == null ? null : Number(seq);
+    rootEl.querySelectorAll('.card').forEach(function (el) {
+      el.classList.toggle('active', want != null && Number(el.getAttribute('data-seq')) === want);
+    });
+  }
+
   /* ---------------- #61：新建成功后滚动并激活 ---------------- */
   // 如果当前筛选会把新工单藏起来，先清掉（否则滚过去是空白）
   function clearFiltersIfHides(created) {
@@ -435,7 +446,7 @@
   }
 
   window.Board = {
-    mount: mount, render: render, renderColumns: renderColumns,
+    mount: mount, render: render, renderColumns: renderColumns, markActive: markActive,
     focusSearch: focusSearch, showLoadError: showLoadError, revealCreated: revealCreated
   };
 })();

@@ -133,8 +133,8 @@ claimed_at      TEXT    ISO8601 UTC
    「被谁认领（id + role + model）、什么时候」。
 3. **幂等**：同一 actor 重复认领 → 200，只刷新 `claimed_at`。
 4. **释放**：`POST /api/tickets/:id/release`。只有认领者本人能释放；别人释放 → 409 `TICKET_CLAIMED`。
-5. **超时**：认领超过 **30 分钟**自动失效。惰性判定——读的时候发现超期就当未认领，不需要定时任务。
-6. **写操作保护**：已认领且调用者不是认领者时，`PATCH` / `DELETE` / `comment_add` → **409 `TICKET_CLAIMED`**。
+5. **超时**：认领超过 **6 小时**（`CLAIM_STALE_MS`）自动失效。惰性判定——读的时候发现超期就当未认领，不需要定时任务。
+6. **写操作保护**：已认领且调用者不是认领者时，`PATCH` / `comment_add` → **409 `TICKET_CLAIMED`**。
    **例外：`role=user` 永远可以覆盖** —— 用户是老板，不能被 AI 锁死。
 7. **删除工单**不受认领限制（用户的清理动作不能被卡）。
 
@@ -149,7 +149,7 @@ claimed_at      TEXT    ISO8601 UTC
 **理由**：AI 读列表时就该看到「这张被别人占了，别动」，而不是等动手时被 409 拒。
 这是本项目「给 AI 纯文本」的核心价值 —— 把冲突信息前置到读的时候。
 
-#### MCP 工具（从 10 个增至 13 个）
+#### MCP 工具（当前 12 个，见第 5 节完整表）
 
 | 工具 | 入参 | 作用 |
 |---|---|---|
@@ -226,7 +226,7 @@ claimed_at      TEXT    ISO8601 UTC
 | 未被认领 | 幂等成功，200 |
 | 认领者本人（id+role 相同） | 释放，四个字段置 NULL |
 | 调用者 `role=user` | 可释放任何人的认领 |
-| 其它 AI 且未过期 | **403 `CLAIM_NOT_OWNER`** |
+| 其它 AI 且未过期 | **409 `TICKET_CLAIMED`** |
 | 其它 AI 且已过期 | 视为接管释放（四个字段置 NULL） |
 
 自动释放：`PATCH /api/tickets/:id` 把 `status` 改成 `done` / `cancelled` 时，同一次 UPDATE 里把认领四字段置 NULL。
@@ -360,7 +360,7 @@ id: 6f1c...
 | `comment_update` | `comment_id, body, actor_id, actor_model` | 改评论 |
 | `comment_delete` | `comment_id, actor_id, actor_model` | 删评论 |
 
-MCP 侧写操作 `role=ai`，`actor_id`/`actor_model` 必填（schema 设 required，描述写明「填你自己的身份和模型，例如 deepseek-v4.1）。
+MCP 侧写操作 `role=ai`，`actor_id`/`actor_model` 必填（schema 设 required，描述只说明「由调用方自报写入者标识与模型名」，不给具体名字或模型名当范例——那会被别的 AI 当成"我是谁"的答案）。
 
 传输：`POST /mcp`，`StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true })`，每请求新建 server+transport（无状态）。`GET /mcp` 与 `DELETE /mcp` 返回 405 JSON。
 

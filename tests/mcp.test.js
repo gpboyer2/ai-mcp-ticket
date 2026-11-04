@@ -1,5 +1,5 @@
 // MCP 端点（契约第 5 节）。
-// 核心断言：恰好 10 个工具、返回纯文本而不是 JSON、写工具缺身份要 isError。
+// 核心断言：恰好 12 个工具、返回纯文本而不是 JSON、写工具缺身份要 isError。
 // "不返回 JSON" 是本项目的核心取舍 —— 返回 JSON 就等于把 token 浪费在括号和引号上。
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -7,7 +7,7 @@ import { req, startTestApp, mcp, mcpInit, mcpCall } from './_helpers.js';
 
 const WS = 'demo-project';
 
-/** 契约第 5 节列的 10 个工具名（顺序无关，集合必须完全一致） */
+/** 契约第 5 节列的 12 个工具名（顺序无关，集合必须完全一致） */
 const EXPECTED_TOOLS = [
   'workspace_list',
   'ticket_list',
@@ -15,13 +15,15 @@ const EXPECTED_TOOLS = [
   'ticket_create',
   'ticket_update',
   'ticket_delete',
+  'ticket_claim',
+  'ticket_release',
   'comment_list',
   'comment_add',
   'comment_update',
   'comment_delete',
 ];
 
-test('initialize → tools/list 恰好 10 个工具，名字与契约第 5 节完全一致', async () => {
+test('initialize → tools/list 恰好 12 个工具，名字与契约第 5 节完全一致', async () => {
   const app = await startTestApp();
   try {
     const init = await mcpInit(app.base);
@@ -31,13 +33,13 @@ test('initialize → tools/list 恰好 10 个工具，名字与契约第 5 节�
 
     const list = await mcp(app.base, { jsonrpc: '2.0', id: 2, method: 'tools/list' });
     const names = list.json.result.tools.map((t) => t.name);
-    assert.equal(names.length, 10, `工具必须恰好 10 个（契约第 5 节），实际 ${names.length}: ${names.join(',')}`);
+    assert.equal(names.length, 12, `工具必须恰好 12 个（契约第 5 节），实际 ${names.length}: ${names.join(',')}`);
     assert.deepEqual([...names].sort(), [...EXPECTED_TOOLS].sort(), '工具名集合必须与契约第 5 节完全一致');
     // 不能多也不能少
     for (const n of EXPECTED_TOOLS) assert.ok(names.includes(n), `缺少工具 ${n}`);
 
     // 写工具的 schema 必须把 actor_id / actor_model 设为 required（契约 5 末段）
-    const writeTools = ['ticket_create', 'ticket_update', 'ticket_delete', 'comment_add', 'comment_update', 'comment_delete'];
+    const writeTools = ['ticket_create', 'ticket_update', 'ticket_delete', 'ticket_claim', 'ticket_release', 'comment_add', 'comment_update', 'comment_delete'];
     for (const name of writeTools) {
       const tool = list.json.result.tools.find((t) => t.name === name);
       assert.ok(tool, `写工具 ${name} 必须存在`);
@@ -46,9 +48,14 @@ test('initialize → tools/list 恰好 10 个工具，名字与契约第 5 节�
       assert.ok(required.includes('actor_model'), `${name} 的 schema 必须把 actor_model 设为 required`);
       assert.match(
         JSON.stringify(tool.inputSchema),
-        /你自己的身份|actor_model/,
-        `${name} 的描述里应写明"填你自己的身份和模型"（契约 5 末段）`,
+        /actor_model/,
+        `${name} 的描述里应说明 actor 由调用方自报（契约 5 末段）`,
       );
+      // 不许把具体名字或模型名当范例：那会被别的 AI 读成"我是谁"的答案
+      const schemaText = JSON.stringify(tool.inputSchema);
+      for (const leaked of ['dsh-lead', 'claude', 'group/cherish-ai', '你自己']) {
+        assert.ok(!schemaText.includes(leaked), `${name} 的描述里不许出现具体身份范例「${leaked}」`);
+      }
     }
     // 建单工具的 schema 只认 content（契约 1.3：title / body 两个概念已废除）
     const createTool = list.json.result.tools.find((t) => t.name === 'ticket_create');
@@ -312,6 +319,40 @@ test('GET / DELETE /mcp 返回 405 JSON（契约 5 传输约定）', async () =>
     const del = await req(app.base, '/mcp', { method: 'DELETE' });
     assert.equal(del.status, 405, 'DELETE /mcp 必须 405（不支持会话删除）');
     assert.equal(del.body.error.code, 'METHOD_NOT_ALLOWED');
+  } finally {
+    await app.close();
+  }
+});
+
+test('ticket_claim / ticket_release：MCP 也能认领与释放（契约 5）', async () => {
+  const app = await startTestApp();
+  try {
+    const created = await mcpCall(app.base, 'ticket_create', {
+      workspace: WS,
+      content: 'MCP 认领测试',
+      actor_id: 'ai-a',
+      actor_model: 'm1',
+    });
+    const ref = /ticket: (\S+)/.exec(created.content[0].text)[1];
+
+    // ai-a 认领：返回纯文本，且带 assignee 行
+    const claimed = await mcpCall(app.base, 'ticket_claim', { ref, actor_id: 'ai-a', actor_model: 'm1' });
+    assert.notEqual(claimed.isError, true, `认领不该报错：${claimed.content?.[0]?.text}`);
+    assert.match(claimed.content[0].text, /assignee: ai:ai-a \(m1\) since /);
+
+    // ai-b 再认领 → 被拒（返回文本说明，不是 JSON-RPC 异常）
+    const conflict = await mcpCall(app.base, 'ticket_claim', { ref, actor_id: 'ai-b', actor_model: 'm2' });
+    assert.equal(conflict.isError, true, '已被他人认领时 ticket_claim 必须 isError');
+    assert.match(conflict.content[0].text, /已被/);
+
+    // ai-b 释放别人的认领 → 也被拒
+    const badRelease = await mcpCall(app.base, 'ticket_release', { ref, actor_id: 'ai-b', actor_model: 'm2' });
+    assert.equal(badRelease.isError, true, '非认领者释放必须 isError');
+
+    // ai-a 自己释放 → 成功，assignee 行消失
+    const released = await mcpCall(app.base, 'ticket_release', { ref, actor_id: 'ai-a', actor_model: 'm1' });
+    assert.notEqual(released.isError, true, `释放不该报错：${released.content?.[0]?.text}`);
+    assert.ok(!released.content[0].text.includes('assignee:'), '释放后不该再有 assignee 行');
   } finally {
     await app.close();
   }

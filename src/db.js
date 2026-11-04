@@ -11,10 +11,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const DEFAULT_DB_PATH = path.join(ROOT, 'data', 'ticket.db');
 export const SCHEMA_VERSION = 3;
 
-// 认领（锁定）惰性过期时长（契约 1.6 / 3.2.1）。
-// ⚠️ 契约自相矛盾：1.6 正文第 5 条写「30 分钟」，但 1.6 数据模型注释、3.2.1 都写「6 小时（CLAIM_STALE_MS）」。
-// 这里取 6 小时作为单一常量默认值（与命名常量 CLAIM_STALE_MS 对齐、且被「可调常量」描述过两次），
-// 30 分钟/6 小时的最终取值待 lead / 用户拍板。改这一行即可全局调整。
+// 认领（锁定）惰性过期时长（契约 1.6 / 3.2.1）：6 小时。
+// 全项目只有这一个常量；契约里三处表述已统一到它，不要再各写一个数。
 export const CLAIM_STALE_MS = 6 * 60 * 60 * 1000;
 
 /** DB_PATH 环境变量 / 显式参数 / 默认 data/ticket.db */

@@ -16,15 +16,11 @@ const fail = (e) => ({
 });
 
 const STATUS_ENUM = z.enum(STATUSES);
+// 审计字段：只记「谁写的、用什么模型写的」，不规定调用者叫什么、是什么角色。
+// 描述里不许出现具体名字或模型名当范例——那会被别的 AI 当成"我是谁"的答案。
 const actorFields = {
-  actor_id: z
-    .string()
-    .min(1)
-    .describe('你自己的身份标识，必填。填你自己的名字，例如 dsh-lead、deepseek'),
-  actor_model: z
-    .string()
-    .min(1)
-    .describe('你当前正在使用的模型名，必填。例如 group/cherish-ai、deepseek-v4.1'),
+  actor_id: z.string().min(1).describe('写入者的标识，必填，由调用方自报'),
+  actor_model: z.string().min(1).describe('写入时所用的模型名，必填，由调用方自报'),
 };
 
 const READ = { readOnlyHint: true, openWorldHint: false };
@@ -132,7 +128,7 @@ export function buildMcpServer(ctx, { baseUrl = '' } = {}) {
       title: '新建工单',
       description:
         '新建工单，返回新工单的纯文本。工单只有 content 一个内容字段（不再区分标题和正文）。' +
-        'actor_id/actor_model 必填：填你自己的身份和模型，例如 dsh-lead / group/cherish-ai。',
+        'actor_id/actor_model 必填：调用方自报写入者标识与模型名。',
       inputSchema: {
         workspace: z.string().min(1).describe('工作区 slug 或 id'),
         content: z.string().min(1).max(100000).describe('工单内容，Markdown 文本，1..100000 字'),
@@ -148,7 +144,7 @@ export function buildMcpServer(ctx, { baseUrl = '' } = {}) {
         const actor = writer(args);
         const ws = requireWs(args.workspace);
         const t = tickets.create(ws, args, actor);
-        return ok(renderOne(t.id, { event: 'ticket_create', actorRole: actor.role }));
+        return ok(renderOne(t.id, { event: 'ticket_create', actorRole: actor.role, actor }));
       } catch (e) {
         return fail(e);
       }
@@ -162,7 +158,7 @@ export function buildMcpServer(ctx, { baseUrl = '' } = {}) {
       description:
         '局部更新工单（只传要改的字段），返回更新后的纯文本。' +
         '处理完务必把 status 推进到 in_progress / done；状态不是装饰，用户靠它看看板。' +
-        'actor_id/actor_model 必填：填你自己的身份和模型。',
+        'actor_id/actor_model 必填：调用方自报写入者标识与模型名。',
       inputSchema: {
         ref: z.string().min(1).describe('工单引用，形如 {slug}#{seq}，或 uuid'),
         content: z.string().max(100000).optional().describe('新的工单内容'),
@@ -190,7 +186,7 @@ export function buildMcpServer(ctx, { baseUrl = '' } = {}) {
     {
       title: '删除工单',
       description:
-        '删除工单（连同它的评论），返回 deleted: ref。actor_id/actor_model 必填：填你自己的身份和模型。',
+        '删除工单（连同它的评论），返回 deleted: ref。actor_id/actor_model 必填：调用方自报写入者标识与模型名。',
       inputSchema: {
         ref: z.string().min(1).describe('工单引用，形如 {slug}#{seq}，或 uuid'),
         ...actorFields,
@@ -202,6 +198,56 @@ export function buildMcpServer(ctx, { baseUrl = '' } = {}) {
         writer(args);
         const { ref } = tickets.remove(args.ref);
         return ok(`deleted: ${ref}`);
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'ticket_claim',
+    {
+      title: '认领工单',
+      description:
+        '认领（锁定）工单，表示「这张单我正在改，别人别动」，返回工单纯文本。' +
+        '已被他人认领且未过期时返回 409 的文本说明。actor_id/actor_model 必填。',
+      inputSchema: {
+        ref: z.string().min(1).describe('工单引用，形如 {slug}#{seq}，或 uuid'),
+        ...actorFields,
+      },
+      annotations: WRITE,
+    },
+    async (args) => {
+      try {
+        const actor = writer(args);
+        const { ticket, took_over } = tickets.claim(args.ref, actor);
+        const text = renderOne(ticket.id);
+        // 接管过期的认领要说明白，否则 AI 以为自己抢了别人的活却不知道发生了什么
+        return ok(took_over ? `${text}\n# 认领提醒: 原认领已过期，你已接管\n` : text);
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'ticket_release',
+    {
+      title: '释放认领',
+      description:
+        '释放自己对该工单的认领，返回工单纯文本。只有认领者本人或用户可释放。' +
+        'actor_id/actor_model 必填。',
+      inputSchema: {
+        ref: z.string().min(1).describe('工单引用，形如 {slug}#{seq}，或 uuid'),
+        ...actorFields,
+      },
+      annotations: WRITE,
+    },
+    async (args) => {
+      try {
+        const actor = writer(args);
+        const t = tickets.release(args.ref, actor);
+        return ok(renderOne(t.id));
       } catch (e) {
         return fail(e);
       }
@@ -234,7 +280,7 @@ export function buildMcpServer(ctx, { baseUrl = '' } = {}) {
       description:
         '给工单加一条评论，返回该工单最新全文（含新评论）。' +
         '处理完务必把 status 推进到 in_progress / done；状态不是装饰，用户靠它看看板。' +
-        'actor_id/actor_model 必填：填你自己的身份和模型。',
+        'actor_id/actor_model 必填：调用方自报写入者标识与模型名。',
       inputSchema: {
         ref: z.string().min(1).describe('工单引用，形如 {slug}#{seq}，或 uuid'),
         body: z.string().min(1).max(10000).describe('评论正文，1..10000 字'),
@@ -248,7 +294,7 @@ export function buildMcpServer(ctx, { baseUrl = '' } = {}) {
         const t = tickets.findByIdOrRef(args.ref);
         if (!t) throw new HttpError(404, 'TICKET_NOT_FOUND', `工单不存在: ${args.ref}`);
         comments.create(t.id, { body: args.body }, actor);
-        return ok(renderOne(t.id, { event: 'comment_add', body: args.body, actorRole: actor.role }));
+        return ok(renderOne(t.id, { event: 'comment_add', body: args.body, actorRole: actor.role, actor }));
       } catch (e) {
         return fail(e);
       }
@@ -260,7 +306,7 @@ export function buildMcpServer(ctx, { baseUrl = '' } = {}) {
     {
       title: '修改评论',
       description:
-        '改评论正文，返回该工单最新全文。actor_id/actor_model 必填：填你自己的身份和模型。',
+        '改评论正文，返回该工单最新全文。actor_id/actor_model 必填：调用方自报写入者标识与模型名。',
       inputSchema: {
         comment_id: z.string().min(1).describe('评论 uuid'),
         body: z.string().min(1).max(10000).describe('新的评论正文'),
@@ -272,7 +318,7 @@ export function buildMcpServer(ctx, { baseUrl = '' } = {}) {
       try {
         const actor = writer(args);
         const c = comments.update(args.comment_id, { body: args.body });
-        return ok(renderOne(c.ticket_id, { event: 'comment_add', body: args.body, actorRole: actor.role }));
+        return ok(renderOne(c.ticket_id, { event: 'comment_add', body: args.body, actorRole: actor.role, actor }));
       } catch (e) {
         return fail(e);
       }
@@ -283,7 +329,7 @@ export function buildMcpServer(ctx, { baseUrl = '' } = {}) {
     'comment_delete',
     {
       title: '删除评论',
-      description: '删除评论，返回该工单最新全文。actor_id/actor_model 必填：填你自己的身份和模型。',
+      description: '删除评论，返回该工单最新全文。actor_id/actor_model 必填：调用方自报写入者标识与模型名。',
       inputSchema: {
         comment_id: z.string().min(1).describe('评论 uuid'),
         ...actorFields,

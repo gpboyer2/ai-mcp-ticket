@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { startTestApp, req, reqText, AI_HEADERS } from './_helpers.js';
 import { allowedTransitions } from '../src/repo/tickets.js';
-import { statusHint } from '../src/render/text.js';
+import { statusHint, claimLockHint } from '../src/render/text.js';
 
 const WS = 'demo-project';
 
@@ -112,7 +112,7 @@ test('迁移表：删除不受状态限制', async () => {
   }
 });
 
-test('状态提醒：AI 给 open 工单加评论，末尾追加提醒行', async () => {
+test('状态提醒：AI 给 open 工单加评论，返回的纯文本末尾追加提醒行', async () => {
   const app = await startTestApp();
   try {
     const t = (await create(app.base, { content: '提醒测试' })).body;
@@ -122,6 +122,50 @@ test('状态提醒：AI 给 open 工单加评论，末尾追加提醒行', async
       body: { body: '我看了一下这个问题' },
     });
     assert.equal(c.status, 201);
+    // REST 走的是 status_hint 字段，MCP 走的是整段纯文本；这里验 REST 那条
+    assert.match(
+      c.body.status_hint || '',
+      /该工单仍是「打开」/,
+      `AI 给 open 工单加评论，REST 必须回 status_hint，实际：${JSON.stringify(c.body)}`,
+    );
+  } finally {
+    await app.close();
+  }
+});
+
+test('claimLockHint：他人认领才提醒，自己和用户都不提醒', () => {
+  const claimed = {
+    assignee_id: 'other-ai',
+    assignee_role: 'ai',
+    assignee_model: 'm1',
+    claimed_at: '2026-11-04T09:00:00.000Z',
+  };
+  // 别的 AI 来写 → 提醒，且带上认领者身份与时间
+  const hint = claimLockHint(claimed, { id: 'me', role: 'ai' });
+  assert.match(hint, /# 锁定提醒: 该工单已被 ai:other-ai \(m1\) 于 2026-11-04T09:00:00\.000Z 认领/);
+
+  // 未认领 → 不提醒
+  assert.equal(claimLockHint({ assignee_id: null }, { id: 'me', role: 'ai' }), null);
+  // 自己认领的 → 不提醒
+  assert.equal(claimLockHint(claimed, { id: 'other-ai', role: 'ai' }), null);
+  // 用户是老板，不受锁约束 → 不提醒
+  assert.equal(claimLockHint(claimed, { id: 'user', role: 'user' }), null);
+});
+
+test('锁定提醒：被他人认领时，AI 写评论的纯文本里带锁定提醒', async () => {
+  const app = await startTestApp();
+  try {
+    const t = (await create(app.base, { content: '锁定提醒测试' })).body;
+    // other 先认领
+    const claim = await req(app.base, `/api/tickets/${t.id}/claim`, {
+      method: 'POST',
+      headers: { 'X-Actor-Id': 'other-ai', 'X-Actor-Role': 'ai', 'X-Actor-Model': 'm1' },
+    });
+    assert.equal(claim.status, 200);
+
+    // 同一张单的纯文本里必须出现 assignee 行，AI 读的时候就知道被占了
+    const one = await reqText(app.base, `/${WS}/t/${t.seq}.txt`);
+    assert.match(one.text, /assignee: ai:other-ai \(m1\) since /, '读视图必须给出 assignee 行');
   } finally {
     await app.close();
   }
