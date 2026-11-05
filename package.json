@@ -12,7 +12,9 @@
     "dev": "node --watch src/server.js",
     "mcp": "node src/mcp-stdio.js",
     "test": "node --test 'tests/*.test.js'",
-    "smoke": "node scripts/smoke.js"
+    "smoke": "node scripts/smoke.js",
+    "check:comments": "node scripts/check-comment-limit.mjs",
+    "check:comments:all": "node scripts/check-comment-limit.mjs --all"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",

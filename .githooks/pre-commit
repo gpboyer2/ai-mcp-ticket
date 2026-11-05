@@ -1,0 +1,13 @@
+#!/bin/sh
+# 提交前检查：代码注释行数 + md 里的 AI 套话。
+# 规则见 docs/agents/COMMENTS.md 与 docs/agents/MD-WRITING.md。
+# 生效方式：git config core.hooksPath .githooks
+# 临时跳过（不推荐）：git commit --no-verify
+root=$(git rev-parse --show-toplevel)
+if ! command -v node >/dev/null 2>&1; then
+  echo "❌ pre-commit：找不到 node。本仓库要求 Node 22.22.3（nvm use），先让它进 PATH 再提交。" >&2
+  exit 1
+fi
+node "$root/scripts/check-comment-limit.mjs" || exit 1
+node "$root/scripts/check-md-filler.mjs" || exit 1
+exit 0
