@@ -15,7 +15,6 @@
   let ticket = null;
   let comments = [];
   let open = false;
-  let claimBusy = false; // 认领请求进行中：防连点造成两次 409
 
   /* ---------------- 骨架 ---------------- */
   function mount(container) {
@@ -35,13 +34,6 @@
       T.emit('detail:close');
     });
     bindResize();
-    // 认领按钮挂在 rootEl 上（只挂一次）：meta-bar 每次 updateMeta 都重写 innerHTML，
-    // 挂在按钮上或每次 render 都挂一次会重复绑定。
-    rootEl.addEventListener('click', function (e) {
-      const btn = e.target.closest && e.target.closest('[data-claim]');
-      if (!btn) return;
-      onClaimClick(btn.getAttribute('data-claim'));
-    });
     // #6：详情是浮层，点它外面就关掉。
     // 用 pointerdown 而非 click：点看板卡片时先关旧详情，卡片再开新详情；
     // 若用 click，卡片的 click 先跑、刚开的详情会被这里误关。
@@ -55,35 +47,6 @@
     if (rootEl.contains(e.target)) return;
     if (e.target.closest && e.target.closest('.overlay, .drawer, .menu, #toast-root, .app-bar')) return;
     T.emit('detail:close');
-  }
-
-  // 认领 / 释放：成功后只刷新 meta（不整页重渲染），并让看板重新拉一次数据
-  async function onClaimClick(action) {
-    if (!ticket || claimBusy) return;
-    claimBusy = true;
-    try {
-      const updated = action === 'claim'
-        ? await T.API.claimTicket(ticket.id)
-        : await T.API.releaseTicket(ticket.id);
-      Object.assign(ticket, updated || {});
-      updateMeta();
-      T.toast(action === 'claim' ? '已认领这张工单' : '已释放认领', 'ok');
-      T.emit('board:reload');
-    } catch (err) {
-      T.toast(err.message || '认领失败', 'error');
-      // 409/403 说明页面上的认领状态已经过期，重新拉一次把真实的认领者显示出来
-      if (err.status === 409 || err.status === 403) {
-        try {
-          const fresh = await T.API.getTicket(ticket.id);
-          Object.assign(ticket, fresh || {});
-          updateMeta();
-        } catch (e) {
-          T.toast('刷新认领状态失败：' + e.message, 'error');
-        }
-      }
-    } finally {
-      claimBusy = false;
-    }
   }
 
   function bindResize() {
@@ -120,32 +83,17 @@
     }).join('、');
   }
 
-  // 认领块（契约 3.2）。当前页面一律以 user 身份写（common.js 的 WRITE_HEADERS 固定 user），
-  // 所以「本人」就是 assignee_role=user 且 assignee_id=user —— 不为此另造一套身份系统。
-  function isMyClaim(t) {
-    return t.assignee_role === 'user' && t.assignee_id === 'user';
-  }
-
-  function claimLabel(t) {
-    if (t.assignee_role === 'ai') {
-      return 'ai:' + t.assignee_id + (t.assignee_model ? '（' + t.assignee_model + '）' : '');
-    }
-    return '用户本人';
-  }
-
-  // 认领块只有这一份实现：headHtml 与 updateMeta 都调它，两处各写一份必然漂移
-  function claimChipHtml(t) {
-    if (!t.assignee_id) {
-      return '<button type="button" class="meta-chip meta-claim" data-claim="claim" title="认领后别的会话就不会来改这张工单">' +
-        window.icon('user', 12) + '<span>认领</span></button>';
-    }
-    const mine = isMyClaim(t);
-    return '<span class="meta-chip meta-claim' + (mine ? ' mine' : '') + '" title="' +
-        T.esc('认领时间 ' + (t.claimed_at || '')) + '">' +
+  // 认领只对 AI 生效（MCP 的 ticket_claim / ticket_release），人类界面不提供认领 / 释放操作。
+  // 这里只读：被认领时给一行状态，提示用户此刻无法编辑（写操作会被 409 挡）。
+  function claimedChipHtml(t) {
+    if (!t.assignee_id) return '';
+    const who = t.assignee_role === 'ai'
+      ? 'ai:' + t.assignee_id + (t.assignee_model ? '（' + t.assignee_model + '）' : '')
+      : '用户本人';
+    return '<span class="meta-chip meta-claimed" title="' +
+        T.esc('AI 认领于 ' + (t.claimed_at || '') + '，超过 6 小时自动失效') + '">' +
       window.icon(t.assignee_role === 'ai' ? 'bot' : 'user', 12) +
-      '<span>' + (mine ? '已认领（你）' : '已认领 · ' + T.esc(claimLabel(t))) + '</span>' +
-      (mine ? '<button type="button" class="chip-btn" data-claim="release" title="释放认领，让别人能接手">释放</button>' : '') +
-      '</span>';
+      '<span>已被 ' + T.esc(who) + ' 认领</span></span>';
   }
 
   // #54 + #13：详情页两段式 —— 「元信息条」+「内容」，没有大标题概念
@@ -160,7 +108,7 @@
           window.icon('link', 12) + '<span>依赖 ' + (depN || '无') + '</span></span>' +
         '<span class="meta-chip">' + window.icon(t.actor_role === 'ai' ? 'bot' : 'user', 12) +
           '<span>' + T.esc(T.actorText(t.actor_role, t.actor_id, t.model)) + '</span></span>' +
-        claimChipHtml(t) +
+        claimedChipHtml(t) +
         '<span class="meta-chip">' + window.icon('clock', 12) + '<span>建于 ' + T.fmtTime(t.created_at) + '</span></span>' +
         '<span class="meta-chip">' + window.icon('refresh-cw', 12) + '<span>更新于 ' + T.fmtTime(t.updated_at) + '</span></span>' +
       '</div>' +
@@ -275,7 +223,7 @@
           window.icon('link', 12) + '<span>依赖 ' + (depN || '无') + '</span></span>' +
         '<span class="meta-chip">' + window.icon(t.actor_role === 'ai' ? 'bot' : 'user', 12) +
           '<span>' + T.esc(T.actorText(t.actor_role, t.actor_id, t.model)) + '</span></span>' +
-        claimChipHtml(t) +
+        claimedChipHtml(t) +
         '<span class="meta-chip">' + window.icon('clock', 12) + '<span>建于 ' + T.fmtTime(t.created_at) + '</span></span>' +
         '<span class="meta-chip">' + window.icon('refresh-cw', 12) + '<span>更新于 ' + T.fmtTime(t.updated_at) + '</span></span>';
     }

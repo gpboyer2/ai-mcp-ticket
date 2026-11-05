@@ -905,31 +905,13 @@ html[data-theme="dark"] .deps-list { box-shadow: 0 12px 32px rgba(0, 0, 0, .5), 
 /* 优先级在 chip 内不做嵌套圆角药丸，只留文字颜色，整体更扁平 */
 .meta-chip .pill { padding: 0; border-radius: 0; background: transparent; font-size: 11px; }
 
-/* 认领 chip（契约 3.2）：未认领时它本身是个按钮；本人认领后带一个「释放」按钮。
-   一律沿用 .meta-chip 的外形，后续重排 meta-bar 样式时不必单独照顾它。 */
-button.meta-chip.meta-claim {
-  cursor: pointer;
-  font-family: inherit;
-  color: var(--accent);
-  border-style: dashed;
-  background: transparent;
+/* 已被认领 chip（契约 3.2）：只读状态，不可点。
+   认领只对 AI 生效（MCP 的 ticket_claim / ticket_release），人类界面不提供认领 / 释放。 */
+.meta-chip.meta-claimed {
+  color: var(--st-in_progress);
+  border-color: color-mix(in srgb, var(--st-in_progress) 35%, transparent);
+  background: color-mix(in srgb, var(--st-in_progress) 8%, transparent);
 }
-button.meta-chip.meta-claim:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
-.meta-chip.meta-claim.mine {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
-}
-.meta-chip .chip-btn {
-  border: 0;
-  padding: 0 2px 0 4px;
-  font: inherit;
-  font-size: 11px;
-  color: var(--muted);
-  background: transparent;
-  cursor: pointer;
-}
-.meta-chip .chip-btn:hover { color: var(--accent); text-decoration: underline; }
 
 /* ② 操作工具栏：右对齐一组，不再散落 */
 .detail-toolbar {
