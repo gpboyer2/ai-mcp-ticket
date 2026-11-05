@@ -59,6 +59,7 @@ ai-mcp-ticket/
 │   ├── views.js                 HTML 视图
 │   ├── workspace-sync.js        从 DeepSeek Harness 只读同步工作区，读 DSH_HOME
 │   ├── port.js                  端口解析：PORT=0 不许被静默降级
+│   ├── pidfile.js               pid 文件：服务自己写，位置跟着数据库走
 │   ├── repo/                    数据层，只操作本文件登记的表
 │   │   ├── tickets.js
 │   │   ├── comments.js
@@ -91,6 +92,7 @@ ai-mcp-ticket/
 │   ├── smoke.js                 端到端冒烟
 │   ├── demo-data.mjs            造演示数据
 │   ├── install-dsh-mcp.mjs      把 MCP 接进 DeepSeek Harness
+│   ├── install-autostart.sh     登记 macOS 开机自启（launchd）
 │   └── ticket.sh                命令行读写工单
 │
 ├── docs/                        项目级文档

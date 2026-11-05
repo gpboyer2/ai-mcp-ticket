@@ -19,6 +19,37 @@
 4. 真实服务的启停只用 `bash scripts/ticket.sh {start|stop|restart|status}`（有 pid 文件管理）。
 5. 每次自测收尾都要核一遍：`curl -s localhost:47321/healthz` 里的 `db` 必须是
    `<项目根>/data/ticket.db`。
+6. pid 文件由服务进程自己写（`src/pidfile.js`，跟着数据库目录走）。launchd 起的实例也有 pid，
+   所以 `ticket.sh status / stop` 对开机自启的实例照样管用；自测用临时 db 时 pid 落在临时目录，不会污染真实实例。
+
+## MCP 怎么启动（2026-11-05 教训，返工两次）
+
+现象：装了 MCP 之后重启电脑，`http://localhost:47321/ai-mcp-ticket/list` 连不上，MCP 工具也不可用。
+
+两次返工的经过，两次都错在同一处：**把 MCP 的可用性绑在「有没有人守着进程」上**。
+
+1. 第一版认为「MCP 是 HTTP 端点，所以必须常驻」，于是写了 launchd 的 plist。macOS 能跑，
+   但 Windows / Linux 用户按这个流程就得各自找守护进程——等于这个 MCP 出了 Mac 就不好用。
+2. 第二版仍然只有 HTTP 一条路，只是把注册做成了脚本。换平台依旧不成立。
+
+事实：别的 MCP（filesystem、serena、数据库类）都是 **stdio** —— 客户端用 `npx` / `uvx` / `node`
+当子进程拉起来，用完就退。所以它们跨平台、零安装、也不存在「重启后没起来」。它们不是服务，是进程。
+
+规矩：
+
+- **MCP 走 stdio**（`npm run mcp` → `src/mcp-stdio.js`），由客户端拉起，macOS / Windows / Linux 一致，
+  不需要任何开机自启。实测：把 47321 的进程停掉（0 个监听），MCP 工具照样能读工单。
+- **看板才是服务**：网页要随时能打开，才需要 47321 上有个进程；这一步与 MCP 无关，按平台各自做
+  （macOS 用 `scripts/install-autostart.sh`，Linux 用 systemd/pm2，Windows 用任务计划程序/pm2/nssm）。
+- HTTP 端点（`/mcp`）保留给「多个客户端共用同一个常驻进程 / 局域网共享」的场景，不再是默认路径。
+
+平台相关的坑（只在要常驻时才遇到）：
+
+1. plist 里的 `ProgramArguments` 直接给 node，**不要**套 `/bin/sh -c`。macOS 的 Desktop 目录有 TCC 保护，
+   launchd 拉起的 shell 读写项目目录会 `Operation not permitted`（日志里表现为 pid 文件写不进去）。
+2. `KeepAlive` 用 `SuccessfulExit=false`，异常退出才重启。设成 `true` 会让 `ticket.sh stop` 停不下来
+   （杀掉 10 秒后又被拉起）。
+3. 排查看 `data/launchd.log` 与 `launchctl print gui/$(id -u)/com.<用户名>.ai-mcp-ticket`。
 
 ---
 

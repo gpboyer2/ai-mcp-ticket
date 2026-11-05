@@ -5,6 +5,7 @@ import { createApp, VERSION } from './app.js';
 import { resolveDbPath } from './db.js';
 import { resolveDshWorkspaceFile } from './workspace-sync.js';
 import { resolvePort } from './port.js';
+import { pidFilePath, writePidFile, removePidFile } from './pidfile.js';
 
 // 端口解析（工单 ai-剧本#70）：不能写 `Number(env.PORT) || 47321`。
 // 因为 Number('0') 是 0，而 0 || 47321 会得到 47321 —— 于是 `PORT=0`（本意是让系统分配随机端口）
@@ -30,10 +31,17 @@ function lanAddresses() {
   return out;
 }
 
+const dbFile = resolveDbPath();
+const pidFile = pidFilePath(dbFile);
 const { app, close } = createApp();
 
 const server = app.listen(PORT, HOST, () => {
-  const dbFile = resolveDbPath();
+  // pid 由服务自己写：launchd、scripts/ticket.sh、npm start 起的实例都是同一份，停的时候不用猜。
+  try {
+    writePidFile(pidFile);
+  } catch (e) {
+    console.error('[pid] 写 pid 文件失败（服务照常运行）：', e);
+  }
   // PORT=0 时由系统分配，真实端口只能从 server.address() 拿；打印 PORT 会显示成 0，误导人。
   const actual = server.address().port;
   console.log(`ai-mcp-ticket v${VERSION} 已启动`);
@@ -46,20 +54,24 @@ const server = app.listen(PORT, HOST, () => {
 });
 
 let closing = false;
+function finish() {
+  try {
+    removePidFile(pidFile);
+  } catch (e) {
+    console.error('[pid] 删 pid 文件失败（不影响退出）：', e);
+  }
+  close();
+  console.log('已退出');
+  process.exit(0);
+}
+
 function shutdown(signal) {
   if (closing) return;
   closing = true;
   console.log(`\n收到 ${signal}，正在关闭…`);
   // 先停止接收新连接，再关数据库；给在途请求 3 秒收尾
-  server.close(() => {
-    close();
-    console.log('已退出');
-    process.exit(0);
-  });
-  setTimeout(() => {
-    close();
-    process.exit(0);
-  }, 3000).unref();
+  server.close(finish);
+  setTimeout(finish, 3000).unref();
 }
 
 process.on('SIGINT', () => shutdown('SIGINT'));

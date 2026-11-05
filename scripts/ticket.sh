@@ -24,7 +24,6 @@ case "${1:-status}" in
     mkdir -p "$ROOT/data"
     cd "$ROOT"
     nohup node src/server.js >>"$LOG_FILE" 2>&1 &
-    echo $! >"$PID_FILE"
     sleep 1
     if is_running; then
       echo "已启动（pid $(cat "$PID_FILE")，端口 $PORT）"
