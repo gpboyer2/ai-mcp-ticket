@@ -125,6 +125,37 @@ npm start
 
 换端口：`PORT=8080 npm start`。
 
+### MCP 怎么起来：stdio（跨平台，推荐）
+
+MCP 本身不是服务，是 AI 客户端按需拉起的子进程 —— Claude、Cursor、DSH、Codex 都是这个模型：
+
+```bash
+node src/mcp-stdio.js     # 等价于 npm run mcp
+```
+
+客户端配成 command 形式即可，macOS / Windows / Linux 一模一样，不需要开机自启，也不需要 47321 有人守着：
+
+```json
+{
+  "mcpServers": {
+    "ticket": { "command": "node", "args": ["/绝对路径/ai-mcp-ticket/src/mcp-stdio.js"] }
+  }
+}
+```
+
+它直连同一个 `data/ticket.db`（WAL + 5 秒 busy_timeout，两个进程同时写不会撞死）。只有工单里的图片链接会指回看板，看板没起时点不开图。
+
+### 看板常驻（可选，按平台）
+
+看板是网页，得有进程在 47321 上守着；这一步跟 MCP 无关，用哪个平台的办法都行：
+
+```bash
+# macOS：登记 LaunchAgent，登录即起（异常退出自动拉回）
+bash scripts/install-autostart.sh
+```
+
+Linux 用 systemd user unit 或 pm2，Windows 用任务计划程序（登录时运行 `node src\server.js`）或 pm2 / nssm —— 都是「把这个 node 进程在登录时起起来」这一件事。
+
 > **看板是空的？** 工作区是只读同步自 DeepSeek Harness 的，没装 DSH 时列表为空。跑一条命令灌入演示数据：`node scripts/demo-data.mjs`（需要先按 [FAQ](#faq--已知限制) 里「工作区列表是空的」一节让服务能看到一个 `demo-project` 工作区）。
 
 ---
@@ -178,7 +209,8 @@ id: 522dee35-8a59-4ab3-bfa4-2b8ceb184145
 ## 接进 DeepSeek Harness
 
 ```bash
-node scripts/install-dsh-mcp.mjs            # 写入 DSH 的 MCP 配置
+node scripts/install-dsh-mcp.mjs            # 写入 stdio 配置（默认，跨平台，不用常驻）
+node scripts/install-dsh-mcp.mjs --http     # 改写成 HTTP 端点（指向 47321）
 node scripts/install-dsh-mcp.mjs --dry-run  # 只看会写什么
 node scripts/install-dsh-mcp.mjs --remove   # 移除
 ```

@@ -51,11 +51,14 @@ ai-mcp-ticket/
 ├── src/                         后端。ESM，按职责分层，不放前端代码
 │   ├── server.js                进程入口：读 PORT，起 HTTP，注册三套接口
 │   ├── app.js                   Express 装配：路由挂载 / 内容协商 / 错误处理
+│   ├── context.js               组装 ctx（数据库 + 四个 repo），HTTP 与 stdio 共用
+│   ├── mcp-stdio.js             stdio 入口：客户端按需拉起，跨平台，不依赖 47321
 │   ├── db.js                    唯一数据库连接：读 DB_PATH，建表，开 WAL
 │   ├── actor.js                 身份解析：X-Actor-Id / X-Actor-Role / X-Actor-Model
 │   ├── mcp.js                   MCP 服务：12 个工具，走 /mcp
 │   ├── views.js                 HTML 视图
 │   ├── workspace-sync.js        从 DeepSeek Harness 只读同步工作区，读 DSH_HOME
+│   ├── port.js                  端口解析：PORT=0 不许被静默降级
 │   ├── repo/                    数据层，只操作本文件登记的表
 │   │   ├── tickets.js
 │   │   ├── comments.js

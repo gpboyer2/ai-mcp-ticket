@@ -4,12 +4,9 @@ import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { openDb, resolveDbPath } from './db.js';
+import { resolveDbPath } from './db.js';
 import { HttpError } from './actor.js';
-import { createWorkspaceRepo } from './repo/workspaces.js';
-import { createTicketRepo } from './repo/tickets.js';
-import { createCommentRepo } from './repo/comments.js';
-import { createActorRepo } from './repo/actors.js';
+import { createContext } from './context.js';
 import { createApiRouter } from './routes/api.js';
 import { createPagesRouter } from './routes/pages.js';
 import { createMcpPostHandler } from './mcp.js';
@@ -34,21 +31,8 @@ export function createApp({
   dshWorkspaceFile,
   uploadDir,
 } = {}) {
-  const db = openDb(dbPath);
-  const workspaceRepo = createWorkspaceRepo(db);
-  const ticketRepo = createTicketRepo(db, workspaceRepo);
-  // 评论 repo 拿工单 repo：写评论时可能同一次提交改状态，迁移规则只能有一份（tickets.update）
-  const commentRepo = createCommentRepo(db, ticketRepo);
-  const actorRepo = createActorRepo(db);
-
-  const ctx = {
-    db,
-    workspaces: workspaceRepo,
-    tickets: ticketRepo,
-    comments: commentRepo,
-    actors: actorRepo,
-    syncOpts: dshWorkspaceFile ? { file: dshWorkspaceFile } : {},
-  };
+  const ctx = createContext({ dbPath, dshWorkspaceFile });
+  const { db, workspaces: workspaceRepo } = ctx;
 
   const app = express();
   app.set('x-powered-by', false);

@@ -1,25 +1,13 @@
 #!/usr/bin/env node
 /**
- * 把 ai-mcp-ticket 的 MCP 端点写入 DeepSeek Harness 的 profile 补丁层。
- *
- * 为什么直接写 cordis.patch.yml：
- *   DSH 没有独立的 MCP 配置文件，一个 MCP 服务就是 @deepseek-ai/dsh-mcp-client 的一行配置，
- *   由 profile 的 patch 列表用顶层 `- insert:` 追加。Magpie 也是这么做的（见
- *   ~/Desktop/Project/magpie/internal/library/dsh.go）。
- *
- * 为什么可以不重启：
- *   desktop profile 由 Electron 启动器提供 profileContext，base 组合包会启用 @deepseek-ai/dsh-hmr，
- *   它 watch 本 profile 的 patch 文件（hmr.watchConfig），配置一改就重载插件树。
- *   若某台机器上 HMR 被禁用，改完需要重启 DSH 才生效——脚本会在结尾提示。
- *
- * 用法：
- *   node scripts/install-dsh-mcp.mjs            # 写入（幂等，已存在则更新 url）
- *   node scripts/install-dsh-mcp.mjs --remove   # 移除
- *   node scripts/install-dsh-mcp.mjs --dry-run  # 只看会写什么
+ * 把 ai-mcp-ticket 的 MCP 配置写入 DeepSeek Harness 的 profile 补丁层（cordis.patch.yml）。
+ * 默认写 stdio（客户端按需拉起子进程，跨平台）；--http 改写成 HTTP 端点；--remove 移除。
+ * 用法：node scripts/install-dsh-mcp.mjs [--http|--remove|--dry-run]
  */
 import { readFileSync, writeFileSync, copyFileSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { resolvePort } from '../src/port.js';
 
 const DSH_HOME = process.env.DSH_HOME || join(homedir(), '.dsh');
@@ -37,21 +25,36 @@ const MARK = '# ai-mcp-ticket';
 const args = process.argv.slice(2);
 const remove = args.includes('--remove');
 const dryRun = args.includes('--dry-run');
+const useHttp = args.includes('--http');
 
-function block(url) {
+// 路径全给绝对路径：客户端的 PATH 与 cwd 跟我们这边不一定一样
+const STDIO_ENTRY = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'mcp-stdio.js');
+
+function block() {
   // 缩进与 Magpie 写出来的行保持一致，方便人工阅读
-  return [
+  const head = [
     `- insert: ${MARK}`,
     `    - id: ${ROW_ID}`,
     '      name: "@deepseek-ai/dsh-mcp-client"',
     '      config:',
     `        serverName: "${SERVER_NAME}"`,
-    '        transport: "streamable-http"',
-    `        url: "${url}"`,
-    '        # 服务没起时不要拦住 DSH 启动，工具稍后自动重连',
-    '        failOnStartupError: false',
-    '        toolCallTimeoutMs: 30000',
   ];
+  if (useHttp) {
+    return head.concat([
+      '        transport: "streamable-http"',
+      `        url: "http://127.0.0.1:${PORT}/mcp"`,
+      '        # 服务没起时不要拦住 DSH 启动，工具稍后自动重连',
+      '        failOnStartupError: false',
+      '        toolCallTimeoutMs: 30000',
+    ]);
+  }
+  return head.concat([
+    '        transport: "stdio"',
+    `        command: "${process.execPath}"`,
+    `        args: ["${STDIO_ENTRY}"]`,
+    '        env:',
+    `          PORT: "${PORT}"`,
+  ]);
 }
 
 function main() {
@@ -64,30 +67,32 @@ function main() {
   const original = readFileSync(PATCH_PATH, 'utf8');
   const lines = original.split('\n');
 
-  // 把已有的 ai-mcp-ticket 块整段摘掉（以我们自己的 mark 开头，直到下一个顶层 "- " 或文件结束）
-  const kept = [];
-  let skipping = false;
-  let removedCount = 0;
+  // 按顶层条目切块（行首 "- " 起一块），把带我们 MARK 或 id 的块整段摘掉，避免 HTTP/stdio 并存导致工具重复。
+  const isTopLevel = (line) => /^- /.test(line) || line === '-';
+  const prefix = [];
+  const blocks = [];
+  let cur = null;
   for (const line of lines) {
-    const isTopLevelEntry = /^- /.test(line) || line === '-';
-    if (isTopLevelEntry) {
-      skipping = line.includes(MARK);
-      if (skipping) {
-        removedCount++;
-        continue;
-      }
+    if (isTopLevel(line)) {
+      cur = [line];
+      blocks.push(cur);
+    } else if (cur) {
+      cur.push(line);
+    } else {
+      prefix.push(line);
     }
-    if (skipping) continue;
-    kept.push(line);
   }
+  const ours = (b) => b.some((l) => l.includes(MARK) || /^\s*-?\s*id:\s*ai-mcp-ticket\s*$/.test(l));
+  const keptBlocks = blocks.filter((b) => !ours(b));
+  const removedCount = blocks.length - keptBlocks.length;
+  const kept = [...prefix, ...keptBlocks.flat()];
 
   let next;
   if (remove) {
     next = kept.join('\n');
   } else {
-    const url = `http://127.0.0.1:${PORT}/mcp`;
     const trimmed = kept.join('\n').replace(/\n+$/, '');
-    next = `${trimmed}\n${block(url).join('\n')}\n`;
+    next = `${trimmed}\n${block().join('\n')}\n`;
   }
 
   // 只在真的变了才写，避免无意义的 HMR 重载
@@ -98,7 +103,7 @@ function main() {
 
   if (dryRun) {
     console.log('--- 将写入的差异 ---');
-    console.log(remove ? `（移除 ${removedCount} 个 ${ROW_ID} 块）` : block(`http://127.0.0.1:${PORT}/mcp`).join('\n'));
+    console.log(remove ? `（移除 ${removedCount} 个 ${ROW_ID} 块）` : block().join('\n'));
     return;
   }
 
