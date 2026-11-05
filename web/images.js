@@ -186,9 +186,15 @@
   // 只允许站内 /uploads/ 路径；其它一律当普通文本转义，不生成 <img>
   const SAFE_IMG = /^\/uploads\/[A-Za-z0-9._-]+\.(png|jpe?g|gif|webp)$/i;
 
+  // 纯文本视图给 AI 的图片是绝对 URL（契约 3.5），AI 会把它原样贴回来写进评论。
+  // 同源绝对 URL 要能渲染，但 src 统一收敛回站内路径，别把别的主机塞进 <img>。
   function safeImgUrl(url) {
     const u = String(url || '').trim();
-    return SAFE_IMG.test(u) ? u : null;
+    if (SAFE_IMG.test(u)) return u;
+    let parsed;
+    try { parsed = new URL(u); } catch (e) { return null; }
+    if (parsed.origin !== window.location.origin) return null;
+    return SAFE_IMG.test(parsed.pathname) ? parsed.pathname : null;
   }
 
   /**
@@ -230,8 +236,11 @@
   }
 
   // 统计一段文本里有几张图（给卡片显示「含 N 张图」）
+  // 两种写法都算：AI 常把纯文本视图里的绝对 URL 原样贴回来
   function countImages(text) {
-    const m = String(text || '').match(/!\[[^\]]*\]\(\s*<?\/uploads\/[^)\s>]+>?\s*\)/g);
+    const m = String(text || '').match(
+      /!\[[^\]]*\]\(\s*<?(?:(?:https?:\/\/[^)\s>/]+)?\/uploads\/[^)\s>]+)>?\s*\)/g
+    );
     return m ? m.length : 0;
   }
 

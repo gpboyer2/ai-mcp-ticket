@@ -11,6 +11,17 @@ export function actorLabel(actorId, actorRole, model) {
 
 const charLen = (s) => [...s].length;
 
+/**
+ * 站内图片路径补成绝对 URL（契约 3.5 / 4.2）。
+ */
+export function absolutizeUploads(text, baseUrl) {
+  const base = String(baseUrl ?? '').replace(/\/+$/, '');
+  const s = String(text ?? '');
+  if (!base) return s;
+  // 前面紧跟字母/数字/冒号/斜杠的说明它已经带主机了（如 http://host/uploads/x.png），不动
+  return s.replace(/(?<![\w:/])\/uploads\//g, `${base}/uploads/`);
+}
+
 /** 按字符（不是 UTF-16 码元）截断，中文不会被切成半个 */
 export function truncate(text, maxlen) {
   const s = String(text ?? '');
@@ -30,7 +41,7 @@ function indentBlock(text, prefix, contIndent) {
   ].join('\n');
 }
 
-function commentsBlock(comments, { comments: commentLimit, indent = '    ' }) {
+function commentsBlock(comments, { comments: commentLimit, indent = '    ', baseUrl = '' }) {
   const total = comments.length;
   if (commentLimit === 0) return []; // ?comments=0 完全隐藏
   if (!total) return [];
@@ -45,7 +56,9 @@ function commentsBlock(comments, { comments: commentLimit, indent = '    ' }) {
   }
   for (const c of shown) {
     const who = actorLabel(c.actor_id, c.actor_role, c.model);
-    out.push(indentBlock(c.body, `${indent}  - ${c.created_at} ${who}: `, `${indent}    `));
+    out.push(
+      indentBlock(absolutizeUploads(c.body, baseUrl), `${indent}  - ${c.created_at} ${who}: `, `${indent}    `),
+    );
   }
   return out;
 }
@@ -105,10 +118,12 @@ export function renderTicketList({
     }
     // 工单只有 content 一个内容字段（契约 1.3）：不再有 title/body 两行，多行按 6 空格对齐
     if (t.content && t.content.trim()) {
-      lines.push(indentBlock(truncate(t.content, maxlen), '    content: ', '      '));
+      lines.push(
+        indentBlock(absolutizeUploads(truncate(t.content, maxlen), baseUrl), '    content: ', '      '),
+      );
     }
     if (t.comments && t.comments.length) {
-      lines.push(...commentsBlock(t.comments, { comments }));
+      lines.push(...commentsBlock(t.comments, { comments, baseUrl }));
     }
     lines.push('');
   });
@@ -230,7 +245,7 @@ export function renderTicket(ticket, { maxlen = 0, workspace, hint = null, baseU
 
   lines.push('', '## 内容');
   const content = (ticket.content || '').trim();
-  lines.push(content ? truncate(content, maxlen) : '(空)');
+  lines.push(content ? absolutizeUploads(truncate(content, maxlen), baseUrl) : '(空)');
 
   const comments = ticket.comments || [];
   lines.push('', `## 评论 (${comments.length})`);
@@ -239,7 +254,7 @@ export function renderTicket(ticket, { maxlen = 0, workspace, hint = null, baseU
   } else {
     for (const c of comments) {
       lines.push(`- [${c.created_at}] ${actorLabel(c.actor_id, c.actor_role, c.model)}`);
-      lines.push(indentBlock(truncate(c.body, maxlen), '  ', '  '));
+      lines.push(indentBlock(absolutizeUploads(truncate(c.body, maxlen), baseUrl), '  ', '  '));
     }
   }
 
@@ -278,7 +293,7 @@ export function renderWorkspaceIndex({ workspaces, generatedAt = new Date().toIS
 }
 
 /** 评论纯文本（MCP comment_list 用） */
-export function renderCommentList(ticket, comments) {
+export function renderCommentList(ticket, comments, { baseUrl = '' } = {}) {
   const lines = [
     `# ai-mcp-ticket comments: ${ticket.ref}  (${comments.length})`,
     '',
@@ -287,7 +302,7 @@ export function renderCommentList(ticket, comments) {
   for (const c of comments) {
     lines.push(`- [${c.created_at}] ${actorLabel(c.actor_id, c.actor_role, c.model)}`);
     lines.push(`  id: ${c.id}`);
-    lines.push(indentBlock(c.body, '  ', '  '));
+    lines.push(indentBlock(absolutizeUploads(c.body, baseUrl), '  ', '  '));
     lines.push('');
   }
   lines.push('# end.');

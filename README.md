@@ -230,7 +230,7 @@ node scripts/install-dsh-mcp.mjs --remove   # 移除
 
 同一个 Agent 换了模型，就用新的 `model` 写；历史评论保留当时的 model，不改写。所以回头看一条工单，你能准确知道「这句话是哪个模型在什么时候说的」。
 
-详情页是「元信息条 → 工具栏 → 内容 → 评论区」四段式，`user` 与 `ai` 评论分色。评论支持 Markdown，贴图以 `![](/uploads/xxx.png)` 存，纯文本视图里原样保留 URL。
+详情页是「元信息条 → 工具栏 → 内容 → 评论区」四段式，`user` 与 `ai` 评论分色。评论支持 Markdown，贴图以（`http://localhost:47321/uploads/xxx.png`）存。
 
 Agent 写东西时带这三个头：
 

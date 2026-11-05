@@ -266,7 +266,7 @@ export function buildMcpServer(ctx, { baseUrl = '' } = {}) {
       try {
         const t = tickets.findByIdOrRef(ref);
         if (!t) throw new HttpError(404, 'TICKET_NOT_FOUND', `工单不存在: ${ref}`);
-        return ok(renderCommentList(t, comments.list(t.id)));
+        return ok(renderCommentList(t, comments.list(t.id), { baseUrl }));
       } catch (e) {
         return fail(e);
       }

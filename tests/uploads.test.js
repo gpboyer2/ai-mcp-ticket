@@ -123,7 +123,7 @@ test('图片上传超 10MB → 413 PAYLOAD_TOO_LARGE', async () => {
   }
 });
 
-test('纯文本视图原样保留 Markdown 图片 URL（契约 3.5 末条）', async () => {
+test('纯文本视图把图片 URL 补成绝对地址（契约 3.5 末条）', async () => {
   const app = await startTestApp();
   try {
     const t = (
@@ -135,10 +135,13 @@ test('纯文本视图原样保留 Markdown 图片 URL（契约 3.5 末条）', a
     const txt = await reqText(app.base, `/${WS}/t/list.txt`.replace('/list.txt', `/${t.seq}.txt`), {
       Accept: 'text/plain',
     });
+    // 只给 /uploads/xxx.png 这种站内相对路径时，AI 会当成文件系统里的目录去找并报不存在，
+    // 所以纯文本必须给能直接打开的绝对 URL
     assert.ok(
-      txt.text.includes('/uploads/20261104-a1b2c3d4.png'),
-      'AI 读纯文本时必须能拿到图片 URL，否则它看不到图',
+      txt.text.includes(`${app.base}/uploads/20261104-a1b2c3d4.png`),
+      'AI 读纯文本时必须拿到绝对 URL，否则它不知道图片在哪台机器上',
     );
+    assert.ok(!txt.text.includes('](/uploads/'), '不能再留站内相对路径');
   } finally {
     await app.close();
   }

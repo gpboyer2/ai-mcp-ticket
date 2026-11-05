@@ -10,6 +10,7 @@ import {
   renderCommentList,
   actorLabel,
   truncate,
+  absolutizeUploads,
   DEFAULT_MAXLEN,
 } from '../src/render/text.js';
 
@@ -339,4 +340,40 @@ test('评论列表纯文本（MCP comment_list 用）：带 id 方便 AI 改删'
 
   const empty = renderCommentList(t, []);
   assert.ok(empty.includes('(暂无评论)'));
+});
+
+test('图片链接必须补成绝对 URL（AI 拿到相对路径会当成文件系统目录去找）', () => {
+  const base = 'http://localhost:47321';
+  assert.equal(absolutizeUploads('![](/uploads/a.png)', base), '![](http://localhost:47321/uploads/a.png)');
+  assert.equal(
+    absolutizeUploads('![](</uploads/b.png>)', base + '/'),
+    '![](<http://localhost:47321/uploads/b.png>)',
+    'baseUrl 末尾多余斜杠不能变成双斜杠',
+  );
+  assert.equal(
+    absolutizeUploads('![](http://other:1/uploads/a.png)', base),
+    '![](http://other:1/uploads/a.png)',
+    '已经带主机的不能再补一遍',
+  );
+  assert.equal(absolutizeUploads('![](/uploads/a.png)', ''), '![](/uploads/a.png)', '没有 baseUrl 时保持原样');
+});
+
+test('列表 / 单张 / 评论列表三处渲染都要补绝对 URL', () => {
+  const base = 'http://localhost:47321';
+  const img = '![](/uploads/20261105-44bfeae7.png)';
+  const withImg = ticket({
+    content: `带图工单\n${img}`,
+    comments: [{ ...ticket().comments[0], body: `评论里的图\n${img}` }],
+  });
+
+  const list = renderTicketList({ workspace: WS, tickets: [withImg], baseUrl: base });
+  assert.ok(list.includes(`${base}/uploads/20261105-44bfeae7.png`), '列表视图（含评论）必须补绝对 URL');
+  assert.ok(!list.includes('](/uploads/'), '列表里不能再留站内相对路径');
+
+  const one = renderTicket(withImg, { workspace: WS, baseUrl: base });
+  assert.ok(one.includes(`${base}/uploads/20261105-44bfeae7.png`), '单张工单（内容 + 评论）必须补绝对 URL');
+  assert.ok(!one.includes('](/uploads/'), '单张工单里不能再留站内相对路径');
+
+  const cs = renderCommentList(withImg, withImg.comments, { baseUrl: base });
+  assert.ok(cs.includes(`${base}/uploads/20261105-44bfeae7.png`), 'comment_list 必须补绝对 URL');
 });

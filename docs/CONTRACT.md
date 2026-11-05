@@ -264,7 +264,7 @@ claimed_at      TEXT    ISO8601 UTC
 - 只接受 `image/png|jpeg|gif|webp`，其它 400 `UNSUPPORTED_TYPE`；单张上限 10MB，超了 413
 - 文件名服务端生成：`{yyyyMMdd}-{8位随机}.{ext}`，**不接受客户端文件名**（防路径穿越）
 - 落盘 `data/uploads/`（`UPLOAD_DIR` 可覆盖），目录自动创建
-- 返回的 `url` 可直接放进 Markdown，如 `/uploads/20261104-a1b2c3d4.png`；评论/正文里的图片以 `![](/uploads/xxx.png)` 存，纯文本视图**原样保留 URL**
+- 返回的 `url` 可直接放进 Markdown，如 `/uploads/20261104-a1b2c3d4.png`；评论/正文里的图片以 `![](http://localhost:47321/uploads/xxx.png)`存
 
 ---
 
