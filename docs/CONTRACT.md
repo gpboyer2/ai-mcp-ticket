@@ -12,7 +12,7 @@
 | 运行环境 | Node.js 22，数据库用 `better-sqlite3` |
 | 监听 | `0.0.0.0:47321`（`PORT` 可覆盖） |
 | 数据库 | `data/ticket.db`（SQLite，WAL；`DB_PATH` 可覆盖） |
-| 启动 | `npm start` → `node src/server.js`；`npm test` → `node --test tests/` |
+| 启动 | `pnpm start` → `node src/server.js`；`pnpm test` → `node --test tests/`（依赖由 pnpm 安装，只认 `pnpm-lock.yaml`） |
 | MCP 端点 | `POST/GET/DELETE /mcp`（streamable-http，无状态，`enableJsonResponse:true`） |
 | 健康检查 | `GET /healthz` → `{"ok":true,"version":"...","db":"...","uptime":n}` |
 
@@ -525,12 +525,12 @@ ai-mcp-ticket/
 
 ## 8. 验收口径（接口级）
 
-1. `npm start` 起得来，`GET /healthz` 200
+1. `pnpm start` 起得来，`GET /healthz` 200
 2. `GET /` 浏览器是 HTML，`curl -H 'Accept: text/plain' /` 是纯文本
 3. 工作区列表与 `~/.dsh/storages/workspace.json` 的 workspace 一一对应
 4. 建工单 → user 加评论 → AI 身份加评论（带 model）→ 改状态 → 改 position 生效 → 删除，全程无 500
 5. `curl -H 'Accept: text/plain' '/{ws}/list?status=open'` 输出符合 4.2 格式
 6. MCP `initialize` / `tools/list` / `tools/call ticket_list` 全通
-7. `npm test` 全绿
+7. `pnpm test` 全绿
 
 前端功能验收见 [`docs/功能清单.md`](./功能清单.md)。

@@ -2,7 +2,7 @@
 
 **给 Agents 看的工单系统：人在网页上拖拽看板，Agent 用 `Accept: text/plain` 直接读纯文本 —— 不是 JSON，不烧 token。**
 
-单进程、单文件 SQLite，无 Docker、无 Postgres、无构建步骤。`npm start` 就有看板 + REST + MCP 三套接口，人和 Agent 读写同一份数据。
+单进程、单文件 SQLite，无 Docker、无 Postgres、无构建步骤。`pnpm start` 就有看板 + REST + MCP 三套接口，人和 Agent 读写同一份数据。
 
 [![CI](https://github.com/gpboyer2/ai-mcp-ticket/actions/workflows/ci.yml/badge.svg)](https://github.com/gpboyer2/ai-mcp-ticket/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -16,7 +16,7 @@
 
 界面是**左边**工作区目录、**中间**五列看板（拖拽换列 / 列内排序）、**右边**工单详情 —— 全程单页不跳转。评论区分 `user` 与 `ai` 并标出模型名，Agent 留过痕的卡片一眼可辨。
 
-> **本仓库不带截图**：`docs/screenshots/` 已在 `.gitignore` 里，图里容易带出本机路径和真实工单内容。想看界面就跑 `npm start` 自己看，或用 `scripts/demo-data.mjs` 造一份 `demo-project` 演示数据（不含任何真实项目信息）。
+> **本仓库不带截图**：`docs/screenshots/` 已在 `.gitignore` 里，图里容易带出本机路径和真实工单内容。想看界面就跑 `pnpm start` 自己看，或用 `scripts/demo-data.mjs` 造一份 `demo-project` 演示数据（不含任何真实项目信息）。
 
 ---
 
@@ -82,7 +82,7 @@ curl -H 'Accept: text/plain' http://localhost:47321/demo-project/list
 | 数据库 | **单文件 SQLite**（WAL 模式） | Postgres + Docker，或 JSON 文件 |
 | 构建步骤 | **无**。原生 HTML/CSS/JS，零 CDN、断网可用 | `npm run build` × N 个包 |
 | 前端依赖 | **0**。无 React、无打包器 | Next.js / Vite / shadcn 全套 |
-| 起服务 | `npm start` | `docker compose up` + 迁移 |
+| 起服务 | `pnpm start` | `docker compose up` + 迁移 |
 
 `better-sqlite3` + WAL 让网页和 MCP 并发读写同一个库不出错（[实测](docs/research.md)）。数据就在 `data/ticket.db`，想备份就 `cp` 一个文件。
 
@@ -115,22 +115,24 @@ curl -H 'Accept: text/plain' http://localhost:47321/demo-project/list
 
 ```bash
 git clone https://github.com/gpboyer2/ai-mcp-ticket.git && cd ai-mcp-ticket
-npm install
-npm start
+pnpm install
+pnpm start
 ```
+
+> **依赖用 pnpm**：仓库只保留 `pnpm-lock.yaml`，没有 `package-lock.json`。请用 `pnpm install`；用 `npm install` 会另生成一份 npm 锁，和 pnpm 装的依赖树对不上。`pnpm-workspace.yaml` 里的 `allowBuilds` 是 `better-sqlite3` 的构建白名单，删了它这个原生模块就跑不起来。
 
 > **分支说明**：`dev` 是默认分支（稳定版），开发在 `feat-v1.0` 上进行。`git clone` 默认拿到 `dev`；想看最新进展：`git checkout feat-v1.0`。
 
 打开 <http://localhost:47321> —— 看板就绪。默认监听 `0.0.0.0:47321`，同一局域网的其他设备也能访问。
 
-换端口：`PORT=8080 npm start`。
+换端口：`PORT=8080 pnpm start`。
 
 ### MCP 怎么起来：stdio（跨平台，推荐）
 
 MCP 本身不是服务，是 AI 客户端按需拉起的子进程 —— Claude、Cursor、DSH、Codex 都是这个模型：
 
 ```bash
-node src/mcp-stdio.js     # 等价于 npm run mcp
+node src/mcp-stdio.js     # 等价于 pnpm mcp
 ```
 
 客户端配成 command 形式即可，macOS / Windows / Linux 一模一样，不需要开机自启，也不需要 47321 有人守着：
@@ -281,8 +283,8 @@ curl -X POST http://localhost:47321/api/tickets/<id>/comments \
 ## 测试
 
 ```bash
-npm test        # 自动化测试（node --test，无需外部依赖，随机端口，不碰任何固定端口）
-npm run smoke   # 端到端冒烟，对着运行中的实例跑
+pnpm test       # 自动化测试（node --test，无需外部依赖，随机端口，不碰任何固定端口）
+pnpm smoke      # 端到端冒烟，对着运行中的实例跑
 ```
 
 自动化测试覆盖纯文本格式逐行断言、内容协商、中文 slug 的四道编解码关、MCP 协议握手与工具调用、并发写、身份校验、图片上传与 `.gitignore` 防线。冒烟测试打真实端口，验证整条链路。
@@ -301,7 +303,7 @@ npm run smoke   # 端到端冒烟，对着运行中的实例跑
 
 **依赖有已知漏洞吗？**
 有一个，如实写在这里：依赖 `zod` 3.x，存在已知 **high** 级漏洞 [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5)（校验超大的带约束集合时可能耗尽内存）。修复需升到 zod 4，属破坏性变更（要重写 `src/mcp.js` 里全部 12 个工具的 schema），因此没有混进 v1.0 发布，单独排期处理。
-实际风险低：本项目 schema 未使用该漏洞所需的 `.min()/.max()` 约束集合组合，且默认只监听内网、无公网暴露。自己跑 `npm audit` 会看到它，这里不藏着。
+实际风险低：本项目 schema 未使用该漏洞所需的 `.min()/.max()` 约束集合组合，且默认只监听内网、无公网暴露。自己跑 `pnpm audit` 会看到它，这里不藏着。
 
 **上传图片有配额吗？**
 没有。单张限 10MB，但总量不限、不清理、不压缩。跑久了记得手动清 `data/uploads/`。
@@ -317,7 +319,7 @@ mkdir -p ~/demo-dsh/storages
 cat > ~/demo-dsh/storages/workspace.json <<'EOF'
 {"tables":{"workspaces":{"00000000-0000-4000-8000-000000000001":{"path":"/path/to/your/workspace/demo-project","title":"demo-project"}}}}
 EOF
-DSH_HOME=~/demo-dsh npm start
+DSH_HOME=~/demo-dsh pnpm start
 node scripts/demo-data.mjs     # 灌入 6 张演示工单 + 人机评论
 ```
 

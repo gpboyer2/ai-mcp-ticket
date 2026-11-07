@@ -37,7 +37,7 @@
 
 规矩：
 
-- **MCP 走 stdio**（`npm run mcp` → `src/mcp-stdio.js`），由客户端拉起，macOS / Windows / Linux 一致，
+- **MCP 走 stdio**（`pnpm mcp` → `src/mcp-stdio.js`），由客户端拉起，macOS / Windows / Linux 一致，
   不需要任何开机自启。实测：把 47321 的进程停掉（0 个监听），MCP 工具照样能读工单。
 - **看板才是服务**：网页要随时能打开，才需要 47321 上有个进程；这一步与 MCP 无关，按平台各自做
   （macOS 用 `scripts/install-autostart.sh`，Linux 用 systemd/pm2，Windows 用任务计划程序/pm2/nssm）。

@@ -9,9 +9,9 @@
 
 1. 只用第一节目录树里登记过的目录。 树里没有的目录，未经过用户明确要求的一律不许新建。
 2. 判定看用途，不看名字。 不要问"我叫这个名字算不算违规"，要问"这个用途树里有没有登记位置"。有，就必须用那一个；换个名字另造一份，同样是违规。
-3. 根目录是锁死的。 根级只允许 `AGENTS.md` `README.md` `LICENSE` `package.json` `package-lock.json` `.gitignore`，不许往根上扔任何报告、脚本、截图、日志。
+3. 根目录是锁死的。 根级只允许 `AGENTS.md` `README.md` `LICENSE` `package.json` `pnpm-lock.yaml` `pnpm-workspace.yaml` `.gitignore`，不许往根上扔任何报告、脚本、截图、日志。
 4. 确实找不到合适的位置才允许新建，而且必须同一次改动里先把新条目写进第一节的目录树（写清用途和约束），再创建目录。
-5. 提交前必跑 `npm test` 与 `npm run smoke`，两个都全绿才算过。布局本身目前靠这条规则和 review 核对，没有脚本自动兜。
+5. 提交前必跑 `pnpm test` 与 `pnpm smoke`，两个都全绿才算过。布局本身目前靠这条规则和 review 核对，没有脚本自动兜。
 
 `目录地图` 就是那份唯一的权威清单。
 
@@ -44,8 +44,9 @@ ai-mcp-ticket/
 ├── AGENTS.md                    协作铁律（唯一入口）。目录与文件规范见 docs/agents/LAYOUT.md
 ├── README.md                    项目总览、架构、启动步骤、MCP 接入
 ├── LICENSE                      MIT
-├── package.json                 根脚本：start / dev / test / smoke
-├── package-lock.json            依赖版本锁定，npm 自动维护，不手改
+├── package.json                 根脚本：start / dev / test / smoke，并声明 packageManager
+├── pnpm-lock.yaml               依赖版本锁定，pnpm 自动维护，不手改
+├── pnpm-workspace.yaml          原生模块构建白名单（better-sqlite3），删了就跑不起来
 ├── .gitignore                   依赖 / 运行期数据 / 上传 / 日志 / 备份 全在这里挡
 │
 ├── src/                         后端。ESM，按职责分层，不放前端代码
@@ -111,7 +112,7 @@ ai-mcp-ticket/
 
 根目录是"目录名混乱"和"临时文件"的重灾区，所以单独锁死。根级只允许：
 
-`AGENTS.md` `README.md` `LICENSE` `package.json` `package-lock.json` `.gitignore`
+`AGENTS.md` `README.md` `LICENSE` `package.json` `pnpm-lock.yaml` `pnpm-workspace.yaml` `.gitignore`
 
 ### 文件命名也别乱来
 
@@ -133,6 +134,6 @@ ai-mcp-ticket/
 ### 可选自检
 
 ```bash
-npm test          # node:test 用例
-npm run smoke     # 端到端冒烟
+pnpm test       # node:test 用例
+pnpm smoke      # 端到端冒烟
 ```

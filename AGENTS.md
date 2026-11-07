@@ -20,7 +20,7 @@
 
 文档、文案、注释怎么写，见 [docs/writing-standards.md](./docs/writing-standards.md)。
 
-提交前 `npm test` 与 `npm run smoke` 必须全绿。
+提交前 `pnpm test` 与 `pnpm smoke` 必须全绿。
 
 ---
 
@@ -77,10 +77,10 @@
 ## 九、常用命令
 
 ```bash
-npm start                 # 服务 http://127.0.0.1:47321（看板 + REST + MCP）
-npm run dev               # 同上，改代码自动重启
-npm test                  # node:test 用例
-npm run smoke             # 端到端冒烟
+pnpm start                # 服务 http://127.0.0.1:47321（看板 + REST + MCP）
+pnpm dev                  # 同上，改代码自动重启
+pnpm test                 # node:test 用例
+pnpm smoke                # 端到端冒烟
 ```
 
 ---
