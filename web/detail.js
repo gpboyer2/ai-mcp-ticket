@@ -75,12 +75,20 @@
   }
 
   /* ---------------- 渲染 ---------------- */
-  function depsInline(blockedBy) {
+  // 依赖 chip：只写数量等于没说，用户得知道等的是哪几张单，所以每张依赖都摆出来、点得进去。
+  // 链接被点击时由 bindEvents 里的 [data-dep] 处理，打开被依赖的那张单。
+  function depsChipHtml(blockedBy) {
     const deps = T.depsList(blockedBy);
-    if (!deps.length) return '<span style="color:var(--muted)">无</span>';
-    return deps.map(function (ref) {
-      return '<a href="#" data-dep="' + T.esc(ref) + '"><code>' + T.esc(ref) + '</code></a>';
-    }).join('、');
+    if (!deps.length) {
+      return '<span class="meta-chip" title="没有依赖工单">' +
+        window.icon('link', 12) + '<span>无依赖</span></span>';
+    }
+    return '<span class="meta-chip meta-deps" title="' + T.esc('依赖：' + deps.join('、')) + '">' +
+      window.icon('link', 12) +
+      deps.map(function (ref) {
+        return '<a href="#" class="dep-link" data-dep="' + T.esc(ref) + '">' + T.esc(ref) + '</a>';
+      }).join('<span class="dep-sep">·</span>') +
+      '</span>';
   }
 
   // 认领只对 AI 生效（MCP 的 ticket_claim / ticket_release），人类界面不提供认领 / 释放操作。
@@ -98,14 +106,12 @@
 
   // #54 + #13：详情页两段式 —— 「元信息条」+「内容」，没有大标题概念
   function headHtml(t) {
-    const depN = T.depsList(t.blocked_by).length;
     return '' +
       // ① 元信息条：一行 chip，间距统一
       '<div class="meta-bar" id="d-meta">' +
         '<span class="meta-chip meta-status">' + T.statusBadge(t.status) + '</span>' +
         '<span class="meta-chip">' + T.priorityPill(t.priority) + '</span>' +
-        '<span class="meta-chip" title="' + T.esc(t.blocked_by || '无依赖') + '">' +
-          window.icon('link', 12) + '<span>依赖 ' + (depN || '无') + '</span></span>' +
+        depsChipHtml(t.blocked_by) +
         '<span class="meta-chip">' + window.icon(t.actor_role === 'ai' ? 'bot' : 'user', 12) +
           '<span>' + T.esc(T.actorText(t.actor_role, t.actor_id, t.model)) + '</span></span>' +
         claimedChipHtml(t) +
@@ -215,12 +221,10 @@
     const t = ticket;
     const bar = document.getElementById('d-meta');
     if (bar) {
-      const depN = T.depsList(t.blocked_by).length;
       bar.innerHTML =
         '<span class="meta-chip meta-status">' + T.statusBadge(t.status) + '</span>' +
         '<span class="meta-chip">' + T.priorityPill(t.priority) + '</span>' +
-        '<span class="meta-chip" title="' + T.esc(t.blocked_by || '无依赖') + '">' +
-          window.icon('link', 12) + '<span>依赖 ' + (depN || '无') + '</span></span>' +
+        depsChipHtml(t.blocked_by) +
         '<span class="meta-chip">' + window.icon(t.actor_role === 'ai' ? 'bot' : 'user', 12) +
           '<span>' + T.esc(T.actorText(t.actor_role, t.actor_id, t.model)) + '</span></span>' +
         claimedChipHtml(t) +
@@ -311,14 +315,15 @@
       window.open(img.getAttribute('src'), '_blank', 'noopener');
     });
 
-    // 依赖链接：在右栏打开被依赖的工单（不跳转）
+    // 依赖链接：同一工作区在右栏原地打开，跨工作区的依赖按真实地址换页
     body.addEventListener('click', function (e) {
       const a = e.target.closest('[data-dep]');
       if (!a) return;
       e.preventDefault();
-      const ref = a.getAttribute('data-dep');
-      const m = /^(.+)#(\d+)$/.exec(ref);
-      if (m && m[1] === S.ws) T.emit('ticket:open-seq', Number(m[2]));
+      const m = /^(.+)#(\d+)$/.exec(a.getAttribute('data-dep') || '');
+      if (!m) return;
+      if (m[1] === S.ws) T.emit('ticket:open-seq', Number(m[2]));
+      else window.location.href = '/' + encodeURIComponent(m[1]) + '/t/' + m[2];
     });
 
     // 评论编辑 / 删除

@@ -307,7 +307,7 @@ claimed_at      TEXT    ISO8601 UTC
 
 [1] demo-project#12  打开  优先级:高  更新:2026-11-04T03:20:00.000Z
     by: ai:deepseek (deepseek-v4.1) at 2026-11-04T03:00:00.000Z
-    blocked_by: demo-project#11
+    依赖工单: http://localhost:47321/demo-project/t/11.txt
     assignee: ai:deepseek (deepseek-v4.1) since 2026-11-04T03:05:00.000Z
     content: 修复回测空指针
       复现步骤 1) ... 2) ...
@@ -323,7 +323,10 @@ claimed_at      TEXT    ISO8601 UTC
 
 - 序号 `[n]` 为本次列表展示序号（1 起），真实引用是 `{slug}#{seq}`
 - 空字段不输出那一行；**未被认领时连 `assignee` 行都不出现**（省 token）
-- 已被认领时在 `blocked_by` 行之后加一行 `assignee: <actorLabel> since <claimed_at>`，`user` 认领写 `assignee: user since <claimed_at>`
+- 依赖不写 `blocked_by` 这种英文字段名（人和 AI 都读不出含义），只写一行 `依赖工单: <文本地址>`，
+  多张依赖用 `、` 分隔；地址是完整 URL（`{host}/{依赖的 slug}/t/{seq}.txt`），
+  AI 顺着它就能读整张依赖工单，人也能直接点开。baseUrl 拿不到时退回 `{slug}#{seq}`
+- 已被认领时加一行 `assignee: <actorLabel> since <claimed_at>`，`user` 认领写 `assignee: user since <claimed_at>`
 - `content` 超 `maxlen`（默认 800，`?maxlen=` 可调，0 不截断）截断加 `…(截断)`
 - `?comments=0` 隐藏评论（默认全显）；`?comments=5` 只显最后 5 条并注 `(共 N 条，仅显示最后 5 条)`
 - 有漏网工单时，末尾多出 1~2 行 `# 待办:`（按原因分档，见 5.5.4）
@@ -337,7 +340,6 @@ status: 打开 (open)   priority: 高 (2)   position: 1024
 workspace: demo-project  path: /path/to/your/workspace/demo-project
 created: 2026-11-04T03:00:00.000Z by ai:deepseek (deepseek-v4.1)
 updated: 2026-11-04T03:20:00.000Z
-blocked_by: demo-project#11
 assignee: ai:deepseek (deepseek-v4.1) since 2026-11-04T03:05:00.000Z
 id: 6f1c...
 
@@ -350,7 +352,15 @@ id: 6f1c...
   已定位到 xxx
 - [2026-11-04T03:15:00.000Z] user
   再加一条要求 yyy
+
+## 依赖工单
+http://localhost:47321/demo-project/t/11.txt
 ```
+
+约定：
+
+- `## 依赖工单` 只在有依赖时出现，放在评论之后、`# end.` 之前；每行一个完整纯文本地址
+- 没有依赖就不出现这一节（不写「无」占位，省 token）
 
 ---
 

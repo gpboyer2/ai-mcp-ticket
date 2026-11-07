@@ -472,15 +472,7 @@
         desc: 'AI 用它先摸清有哪些工作区、每个工作区有多少工单。'
       }) +
       urlCard({
-        title: '② 某个工作区的「进行中」工单',
-        url: slug ? wsTextUrl(slug) : absUrl('/<工作区>/list.txt') + '?status=open,in_progress,reopened',
-        desc: '末尾的 <code>?status=</code> 可换成任意组合：' +
-          '<code>open</code>（打开）、<code>in_progress</code>（处理中）、<code>reopened</code>（重新打开）、' +
-          '<code>done</code>（已完成）、<code>cancelled</code>（已取消）；不写就是全部。' +
-          '再加 <code>&amp;q=关键词</code> 可搜索，<code>&amp;maxlen=0</code> 内容不截断。'
-      }) +
-      urlCard({
-        title: '③ 单张工单的全文（含全部评论）',
+        title: '② 单张工单的全文（含全部评论）',
         url: seq ? ticketTextUrl(slug, seq) : absUrl('/<工作区>/t/<序号>.txt'),
         desc: '把 <code>&lt;工作区&gt;</code> 和 <code>&lt;序号&gt;</code> 换成实际值即可，例如 ' +
           esc(seq ? ticketTextUrl(slug, seq) : absUrl('/my-workspace/t/12.txt')) + '。'

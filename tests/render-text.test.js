@@ -99,7 +99,11 @@ test('4.2 列表格式：首行 / filter 行 / 提示行 / 条目 / 结尾，逐
     '    by: ai:deepseek (deepseek-v4.1) at 2026-11-04T03:00:00.000Z',
     'by 行必须是 `    by: ai:{id} ({model}) at {created_at}`',
   );
-  assert.equal(lines[6], '    blocked_by: demo-project#11', 'blocked_by 有值才输出');
+  assert.equal(
+    lines[6],
+    '    依赖工单: demo-project#11',
+    '有依赖就给一行中文「依赖工单」加可打开的纯文本地址，不写 blocked_by 字段名',
+  );
   assert.equal(lines[7], '    content: 修复回测空指针', 'content 行必须是 `    content: ` 前缀（首行）');
   assert.equal(lines[8], '      复现步骤 1) ... 2) ...', 'content 续行缩进 6 空格，与内容对齐');
   assert.equal(lines[9], '    comments(2):', 'comments 块头必须是 `    comments(N):`');
@@ -246,7 +250,9 @@ test('4.2 多行内容缩进对齐，不破坏段落结构', () => {
 });
 
 test('4.3 单张工单纯文本格式', () => {
-  const out = renderTicket(ticket(), { workspace: WS });
+  const out = renderTicket(ticket(), {
+    workspace: WS,
+  });
   const lines = out.split('\n');
   assert.equal(lines[0], '# ai-mcp-ticket ticket: demo-project#12', '首行必须是 `# ai-mcp-ticket ticket: {ref}`');
   assert.equal(
@@ -265,8 +271,7 @@ test('4.3 单张工单纯文本格式', () => {
     'created 行必须带创建者与 model',
   );
   assert.equal(lines[4], 'updated: 2026-11-04T03:20:00.000Z');
-  assert.equal(lines[5], 'blocked_by: demo-project#11');
-  assert.equal(lines[6], 'id: 6f1c0000-0000-4000-8000-000000000001', 'id 行必须给 uuid（AI 写评论要用）');
+  assert.equal(lines[5], 'id: 6f1c0000-0000-4000-8000-000000000001', 'id 行必须给 uuid（AI 写评论要用）');
 
   const contentIdx = lines.indexOf('## 内容');
   assert.ok(contentIdx > 0, '必须有 `## 内容` 段（契约 4.3）');
@@ -376,4 +381,58 @@ test('列表 / 单张 / 评论列表三处渲染都要补绝对 URL', () => {
 
   const cs = renderCommentList(withImg, withImg.comments, { baseUrl: base });
   assert.ok(cs.includes(`${base}/uploads/20261105-44bfeae7.png`), 'comment_list 必须补绝对 URL');
+});
+
+test('依赖工单：单张工单在评论之后单列一节，给完整纯文本地址', () => {
+  const base = 'http://localhost:47321';
+  const out = renderTicket(ticket(), { workspace: WS, baseUrl: base });
+  const lines = out.split('\n');
+  const idx = lines.indexOf('## 依赖工单');
+  assert.ok(idx > 0, '有依赖时必须出现 `## 依赖工单` 这一节');
+  assert.equal(lines[idx + 1], `${base}/demo-project/t/11.txt`, '下面一行是完整地址，能直接打开');
+  assert.ok(
+    out.indexOf('## 依赖工单') > out.indexOf('## 评论'),
+    '依赖工单放在评论之后',
+  );
+  assert.ok(!out.includes('blocked_by'), '不能再出现 blocked_by 这种字段名');
+});
+
+test('依赖工单：跨工作区的依赖用依赖自己的 slug 拼地址，多张用顿号分隔', () => {
+  const base = 'http://localhost:47321';
+  const out = renderTicket(ticket({ blocked_by: 'demo-project#11, other-ws#7' }), {
+    workspace: WS,
+    baseUrl: base,
+  });
+  const lines = out.split('\n');
+  const idx = lines.indexOf('## 依赖工单');
+  assert.equal(lines[idx + 1], `${base}/demo-project/t/11.txt`);
+  assert.equal(lines[idx + 2], `${base}/other-ws/t/7.txt`, '别的工作区的依赖要按它自己的 slug 拼');
+
+  const list = renderTicketList({
+    workspace: WS,
+    tickets: [ticket({ blocked_by: 'demo-project#11, other-ws#7' })],
+    baseUrl: base,
+  });
+  assert.ok(
+    list.includes(`    依赖工单: ${base}/demo-project/t/11.txt、${base}/other-ws/t/7.txt`),
+    '列表里多张依赖用顿号分隔，仍然只写一行',
+  );
+});
+
+test('依赖工单：没有依赖时既不出现这一节，也不留占位', () => {
+  const t = ticket({ blocked_by: '' });
+  const one = renderTicket(t, { workspace: WS, baseUrl: 'http://localhost:47321' });
+  assert.ok(!one.includes('## 依赖工单'));
+  assert.ok(!one.includes('blocked_by'));
+
+  const list = renderTicketList({ workspace: WS, tickets: [t], baseUrl: 'http://localhost:47321' });
+  assert.ok(!list.includes('依赖工单'));
+});
+
+test('依赖工单：拿不到 baseUrl（MCP stdio）时退回 slug#seq，不给连不上的地址', () => {
+  const out = renderTicket(ticket(), { workspace: WS, baseUrl: '' });
+  const lines = out.split('\n');
+  const idx = lines.indexOf('## 依赖工单');
+  assert.equal(lines[idx + 1], 'demo-project#11');
+  assert.ok(!lines[idx + 1].startsWith('/'), '以 / 开头的相对地址对 MCP 调用方没有意义');
 });

@@ -905,6 +905,18 @@ html[data-theme="dark"] .deps-list { box-shadow: 0 12px 32px rgba(0, 0, 0, .5), 
 /* 优先级在 chip 内不做嵌套圆角药丸，只留文字颜色，整体更扁平 */
 .meta-chip .pill { padding: 0; border-radius: 0; background: transparent; font-size: 11px; }
 
+/* 依赖 chip：把每张依赖工单的 ref 直接摆出来，点一下跳到那张单。
+   只给数量等于没说 —— 用户看不出到底在等哪几张。 */
+.meta-chip.meta-deps { gap: 4px; }
+.meta-chip.meta-deps .dep-link {
+  color: var(--text);
+  text-decoration: none;
+  border-bottom: 1px dashed currentColor;
+  cursor: pointer;
+}
+.meta-chip.meta-deps .dep-link:hover { color: var(--accent); }
+.meta-chip.meta-deps .dep-sep { opacity: .5; }
+
 /* 已被认领 chip（契约 3.2）：只读状态，不可点。
    认领只对 AI 生效（MCP 的 ticket_claim / ticket_release），人类界面不提供认领 / 释放。 */
 .meta-chip.meta-claimed {

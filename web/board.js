@@ -30,7 +30,7 @@
 
   /* ---------------- 渲染 ---------------- */
   function cardHtml(t) {
-    const deps = T.depsList(t.blocked_by).length;
+    const deps = T.depsList(t.blocked_by);
     const last = T.lastComment(t);
     const commentLine = last
       ? '<div class="card-comment">' + window.icon('message-square', 12) + '<span>' +
@@ -50,7 +50,9 @@
       '</div>' +
       '<div class="card-title">' + T.esc(T.cardPreview(t) || '(无内容)') + '</div>' +
       '<div class="card-meta">' +
-        (deps ? '<span class="deps">' + window.icon('link', 11) + '<span>' + deps + '</span></span>' : '') +
+        // 卡片位置小，只放数量，但鼠标悬停要能看出等的是哪几张单
+        (deps.length ? '<span class="deps" title="' + T.esc('依赖：' + deps.join('、')) + '">' +
+          window.icon('link', 11) + '<span>' + deps.length + '</span></span>' : '') +
         '<span>' + T.timeTag(t.updated_at) + '</span>' +
       '</div>' +
       commentLine +

@@ -63,6 +63,24 @@ function commentsBlock(comments, { comments: commentLimit, indent = '    ', base
   return out;
 }
 
+/** blocked_by 串拆成 ref 列表；空串与多余空白都不算依赖 */
+function depRefs(blockedBy) {
+  return String(blockedBy || '').split(',').map((x) => x.trim()).filter(Boolean);
+}
+
+/**
+ * 依赖工单的纯文本地址（契约 4.2 / 4.3），无 baseUrl 时退回 ref 本身。
+ * @param {string} ref 形如 {slug}#{seq}
+ * @param {string} baseUrl 如 http://localhost:47321
+ * @returns {string}
+ */
+function depTextUrl(ref, baseUrl) {
+  const m = /^(.+)#(\d+)$/.exec(ref);
+  const base = String(baseUrl || '').replace(/\/+$/, '');
+  if (!m || !base) return ref;
+  return `${base}/${encodeURIComponent(m[1])}/t/${m[2]}.txt`;
+}
+
 /**
  * 列表提示行（契约 4.2）。给完整 URL 而不是相对路径：AI 拿到 host 之外的文本时
  * 还得猜域名端口，猜错就白跑一趟。host 由调用方从请求里取（局域网访问时就是局域网地址）。
@@ -111,7 +129,9 @@ export function renderTicketList({
     lines.push(
       `    by: ${actorLabel(t.actor_id, t.actor_role, t.model)} at ${t.created_at}`,
     );
-    if (t.blocked_by) lines.push(`    blocked_by: ${t.blocked_by}`);
+    // 依赖同样不写字段名，直接给能打开的地址（契约 4.2）
+    const depUrls = depRefs(t.blocked_by).map((ref) => depTextUrl(ref, baseUrl));
+    if (depUrls.length) lines.push(`    依赖工单: ${depUrls.join('、')}`);
     // 契约 1.6 / 4.2：已认领（且未过期）的工单多一行，让 AI 读列表时就知道"这张被占了，别动"
     if (t.assignee_id) {
       lines.push(`    assignee: ${actorLabel(t.assignee_id, t.assignee_role, t.assignee_model)} since ${t.claimed_at}`);
@@ -236,7 +256,6 @@ export function renderTicket(ticket, { maxlen = 0, workspace, hint = null, baseU
     `created: ${ticket.created_at} by ${actorLabel(ticket.actor_id, ticket.actor_role, ticket.model)}`,
     `updated: ${ticket.updated_at}`,
   ];
-  if (ticket.blocked_by) lines.push(`blocked_by: ${ticket.blocked_by}`);
   // 契约 1.6 / 4.3：已认领（且未过期）多一行 assignee
   if (ticket.assignee_id) {
     lines.push(`assignee: ${actorLabel(ticket.assignee_id, ticket.assignee_role, ticket.assignee_model)} since ${ticket.claimed_at}`);
@@ -256,6 +275,13 @@ export function renderTicket(ticket, { maxlen = 0, workspace, hint = null, baseU
       lines.push(`- [${c.created_at}] ${actorLabel(c.actor_id, c.actor_role, c.model)}`);
       lines.push(indentBlock(absolutizeUploads(truncate(c.body, maxlen), baseUrl), '  ', '  '));
     }
+  }
+
+  // 依赖工单单独成节（契约 4.3），放在评论之后、结尾之前
+  const depUrls = depRefs(ticket.blocked_by).map((ref) => depTextUrl(ref, baseUrl));
+  if (depUrls.length) {
+    lines.push('', '## 依赖工单');
+    lines.push(...depUrls);
   }
 
   // 锁定提醒（契约 5.5.6）放在 # end. 之前，同一个 # 前缀，保持纯文本一致性
